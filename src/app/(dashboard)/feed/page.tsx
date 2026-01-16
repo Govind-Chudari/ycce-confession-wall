@@ -146,7 +146,7 @@ export default function FeedPage() {
             <ConfessionCard
               key={c.id}
               confession={c}
-              onLike={(id) => addReaction(id)}
+              onLike={(id:string) => addReaction(id)}
               onReply={addReply}
               onLikeReply={likeReply}           
               onDeleteReply={deleteReply}       
