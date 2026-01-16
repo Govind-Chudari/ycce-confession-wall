@@ -9,7 +9,7 @@ const ANIMALS = [
     'Swift', 'Clever', 'Wild', 'Free', 'Gentle', 'Fierce', 'Noble'
   ]
   
-  const ANIMAL_EMOJIS: Record = {
+  const ANIMAL_EMOJIS: Record<string, string> = {
     'Panther': '🐆', 'Tiger': '🐯', 'Eagle': '🦅', 'Wolf': '🐺',
     'Falcon': '🦅', 'Bear': '🐻', 'Lion': '🦁', 'Hawk': '🦅',
     'Phoenix': '🔥', 'Dragon': '🐉', 'Raven': '🦅', 'Fox': '🦊',
