@@ -22,7 +22,7 @@ export function extractInfoFromRollNumber(rollNumber: string): {
   const admissionYear = 2000 + yearPrefix
   const year = currentYear - admissionYear + 1
   
-  const deptMap: Record = {
+  const deptMap: Record<string, string> = {
     '01': 'CIVIL',
     '02': 'MECH',
     '03': 'EE',
