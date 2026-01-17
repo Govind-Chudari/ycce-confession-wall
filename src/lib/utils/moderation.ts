@@ -18,6 +18,7 @@ const HATE_SPEECH_PATTERNS = [
 const SPAM_PATTERNS = [/(.)\1{10,}/, /[A-Z\s]{50,}/, /https?:\/\//i];
 
 export async function moderateText(text: string): Promise<ModerationResult> {
+  await Promise.resolve();
   const result: ModerationResult = {
     isClean: true,
     toxicityScore: 0,
@@ -88,6 +89,7 @@ export async function moderateText(text: string): Promise<ModerationResult> {
 export async function moderateImage(
   _imageUrl: string
 ): Promise<ModerationResult> {
+  await Promise.resolve();
   return {
     isClean: false,
     toxicityScore: 0,
