@@ -89,6 +89,7 @@ export async function moderateText(text: string): Promise<ModerationResult> {
 export async function moderateImage(
   _imageUrl: string
 ): Promise<ModerationResult> {
+  void _imageUrl;
   await Promise.resolve();
   return {
     isClean: false,
