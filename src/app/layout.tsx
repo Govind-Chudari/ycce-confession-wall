@@ -1,8 +1,4 @@
 export const dynamic = 'force-dynamic'
-export const revalidate = 0
-
-
-
 
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
@@ -15,7 +11,7 @@ export const metadata: Metadata = {
   title: "YCCE Confession Wall",
   description: "Anonymous confession platform for YCCE students",
   icons: {
-    icon: "/logo.png", 
+    icon: "/logo.png",
   },
 };
 
