@@ -11,72 +11,61 @@ export default function VerifyPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const supabase = createClient()
-  const [status, setStatus] = useState("Verifying your email...")
+  const [status, setStatus] = useState("Verifying...")
 
   useEffect(() => {
-    const run = async () => {
+    const verifyUser = async () => {
+      // 1. Check if we already have a session (Fixes the loop issue)
       const { data: { session } } = await supabase.auth.getSession()
-
+      
       if (session) {
-        await checkProfile(session.user.id)
+        // Already logged in? Just check profile and move on
+        await checkProfileStatus(session.user.id)
         return
       }
 
+      // 2. No session? Try to exchange the code
       const code = searchParams.get('code')
-
-      if (!code) {
-        setStatus("Invalid link. No code found.")
-        setTimeout(() => router.replace("/login"), 2000)
-        return
-      }
-
-      const { data, error } = await supabase.auth.exchangeCodeForSession(code)
-
-      if (error) {
-        console.error("Verify failed", error)
-        setStatus("Link expired or invalid. Redirecting...")
-        setTimeout(() => router.replace("/login"), 2000)
-        return
-      }
-
-      if (data.session) {
-        await checkProfile(data.session.user.id)
+      if (code) {
+        const { data, error } = await supabase.auth.exchangeCodeForSession(code)
+        
+        if (!error && data.session) {
+          await checkProfileStatus(data.session.user.id)
+        } else {
+          // Only redirect to login if it truly fails AND we aren't logged in
+          console.error("Exchange failed:", error)
+          setStatus("Link expired. Redirecting...")
+          setTimeout(() => router.replace("/login"), 2000)
+        }
+      } else {
+         // No code and no session
+         setStatus("Invalid link.")
+         setTimeout(() => router.replace("/login"), 2000)
       }
     }
 
-    const checkProfile = async (userId: string) => {
+    const checkProfileStatus = async (userId: string) => {
       setStatus("Checking profile...")
-      
-      const { data: profile, error: profileError } = await supabase
+      const { data: profile } = await supabase
         .from("profiles")
         .select("is_verified")
         .eq("id", userId)
         .single()
 
-      if (profileError || !profile) {
-        console.error("Profile error", profileError)
-        router.replace("/login")
-        return
-      }
-
-      if (profile.is_verified) {
-        setStatus("Verified! Redirecting to feed...")
-        router.replace("/feed")       // Already verified
+      if (profile?.is_verified) {
+        router.replace("/feed")
       } else {
-        setStatus("Email verified! Taking you to ID setup...")
-        router.replace("/verify-id")  // Needs ID card
+        router.replace("/verify-id")
       }
     }
 
-    run()
-  }, [router, searchParams, supabase])
+    verifyUser()
+  }, [])
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-[#020817] text-white p-4">
-      <div className="flex flex-col items-center space-y-4 p-8 bg-[#0f172a] border border-[#1e293b] rounded-xl shadow-2xl">
-        <Loader2 className="h-10 w-10 animate-spin text-white" />
-        <p className="text-lg font-medium text-slate-200">{status}</p>
-      </div>
+    <div className="flex min-h-screen flex-col items-center justify-center bg-[#020817] text-white">
+      <Loader2 className="h-8 w-8 animate-spin mb-4" />
+      <p>{status}</p>
     </div>
   )
 }
