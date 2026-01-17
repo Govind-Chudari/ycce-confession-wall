@@ -50,3 +50,16 @@ export function formatTimeAgo(date: Date): string {
   
   return date.toLocaleDateString()
 }
+
+export const getURL = () => {
+  let url =
+    process.env.NEXT_PUBLIC_SITE_URL ?? 
+    process.env.NEXT_PUBLIC_VERCEL_URL ?? 
+    'http://localhost:3000/';
+
+  // Ye check karta hai ki http hai ya https aur slash (/) laga hai ya nahi
+  url = url.includes('http') ? url : `https://${url}`;
+  url = url.charAt(url.length - 1) === '/' ? url : `${url}/`;
+
+  return url;
+};

@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { isYCCEEmail } from '@/lib/utils/helpers'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { useRouter } from "next/navigation"
+import { isYCCEEmail, getURL } from '@/lib/utils/helpers' // ✅ Imported correctly
 
 import {
   Card,
@@ -19,8 +19,9 @@ export default function LoginPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
+  
+  const [error, setError] = useState('') 
 
   const supabase = createClient()
 
@@ -29,7 +30,6 @@ export default function LoginPage() {
       const { data } = await supabase.auth.getSession()
 
       if (data.session) {
-        // 👇 Go to verification router, NOT directly to feed
         router.replace("/verify")
       }
     }
@@ -53,7 +53,7 @@ export default function LoginPage() {
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: {
-          emailRedirectTo: `${window.location.origin}/verify`,
+          emailRedirectTo: `${getURL()}verify`,
         },
       })
 

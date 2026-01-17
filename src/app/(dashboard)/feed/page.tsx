@@ -1,7 +1,6 @@
-'use client'
+"use client";
 
-export const dynamic = 'force-dynamic'
-
+export const dynamic = "force-dynamic";
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
@@ -13,6 +12,7 @@ import { ConfessionCard } from "@/components/confession/ConfessionCard";
 import { ConfessionForm } from "@/components/confession/ConfessionForm";
 import { Button } from "@/components/ui/button";
 import { Loader2, TrendingUp, Clock } from "lucide-react";
+// import { isYCCEEmail, getURL } from "@/lib/utils/helpers";
 
 export default function FeedPage() {
   const router = useRouter();
@@ -25,15 +25,15 @@ export default function FeedPage() {
 
   const feedRef = useRef<HTMLDivElement>(null);
 
-  const { 
-    confessions, 
-    loading, 
-    createConfession, 
-    addReaction, 
+  const {
+    confessions,
+    loading,
+    createConfession,
+    addReaction,
     addReply,
     likeReply,
     deleteReply,
-    deleteConfession 
+    deleteConfession,
   } = useConfessions(activeRoom || "");
 
   useEffect(() => {
@@ -83,22 +83,17 @@ export default function FeedPage() {
         {/* HEADER */}
         <div className="relative flex items-center justify-between py-2 mb-4">
           <div className="relative z-10 shrink-0">
-             <div className="relative w-25 h-25 overflow-hidden hover:scale-105 transition-transform duration-300 cursor-pointer">
-               <Image 
-                 src="/logo.png" 
-                 alt="Logo" 
-                 fill
-                 className="object-cover"
-               />
-             </div>
+            <div className="relative w-25 h-25 overflow-hidden hover:scale-105 transition-transform duration-300 cursor-pointer">
+              <Image src="/logo.png" alt="Logo" fill className="object-cover" />
+            </div>
           </div>
           <div className="relative z-10 flex gap-2 shrink-0">
             <Button
               size="icon"
               variant={sortBy === "latest" ? "default" : "outline"}
               className={`w-9 h-9 rounded-xl transition-all shadow-lg ${
-                sortBy === "latest" 
-                  ? "bg-white text-black hover:bg-zinc-200 border-transparent" 
+                sortBy === "latest"
+                  ? "bg-white text-black hover:bg-zinc-200 border-transparent"
                   : "bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800"
               }`}
               onClick={() => setSortBy("latest")}
@@ -109,8 +104,8 @@ export default function FeedPage() {
               size="icon"
               variant={sortBy === "trending" ? "default" : "outline"}
               className={`w-9 h-9 rounded-xl transition-all shadow-lg ${
-                sortBy === "trending" 
-                  ? "bg-purple-600 text-white hover:bg-purple-500 border-transparent shadow-purple-500/20" 
+                sortBy === "trending"
+                  ? "bg-purple-600 text-white hover:bg-purple-500 border-transparent shadow-purple-500/20"
                   : "bg-zinc-900/50 border-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-800"
               }`}
               onClick={() => setSortBy("trending")}
@@ -129,8 +124,8 @@ export default function FeedPage() {
               variant={activeRoom === r.id ? "default" : "outline"}
               onClick={() => setActiveRoom(r.id)}
               className={`rounded-ll px-4 transition-all ${
-                activeRoom === r.id 
-                  ? "bg-white text-black hover:bg-zinc-200 font-bold" 
+                activeRoom === r.id
+                  ? "bg-white text-black hover:bg-zinc-200 font-bold"
                   : "bg-transparent border-zinc-800 text-zinc-400 hover:text-white"
               }`}
             >
@@ -149,11 +144,11 @@ export default function FeedPage() {
             <ConfessionCard
               key={c.id}
               confession={c}
-              onLike={(id:string) => addReaction(id)}
+              onLike={(id: string) => addReaction(id)}
               onReply={addReply}
-              onLikeReply={likeReply}           
-              onDeleteReply={deleteReply}       
-              onDeleteConfession={deleteConfession} 
+              onLikeReply={likeReply}
+              onDeleteReply={deleteReply}
+              onDeleteConfession={deleteConfession}
             />
           ))
         )}
