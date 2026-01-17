@@ -85,7 +85,9 @@ export async function moderateText(text: string): Promise<ModerationResult> {
   return result;
 }
 
-export async function moderateImage(imageUrl: string): Promise<ModerationResult> {
+export async function moderateImage(
+  _imageUrl: string
+): Promise<ModerationResult> {
   return {
     isClean: false,
     toxicityScore: 0,
