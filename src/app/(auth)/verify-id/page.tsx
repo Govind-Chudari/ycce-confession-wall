@@ -1,7 +1,6 @@
-'use client'
+"use client"
 
-export const dynamic = 'force-dynamic'
-
+export const dynamic = "force-dynamic"
 
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
@@ -33,7 +32,6 @@ export default function VerifyIdPage() {
         return
       }
 
-      // 1️⃣ Upload ID card to Supabase Storage
       const { data, error: uploadError } = await supabase.storage
         .from("id-cards")
         .upload(`cards/${user.id}.jpg`, file, { upsert: true })
@@ -44,21 +42,13 @@ export default function VerifyIdPage() {
         .from("id-cards")
         .getPublicUrl(data.path).data.publicUrl
 
-      // 2️⃣ Save ID card in profile
       await supabase.from("profiles").update({
         id_card_url: url,
-        verification_status: "processing"
+        verification_status: "processing",
       }).eq("id", user.id)
 
-      // 3️⃣ Trigger backend verification (barcode + OCR + room join)
-      await fetch("/api/verify-id", {
-        method: "POST",
-        body: JSON.stringify({ userId: user.id })
-      })
-
-      // 4️⃣ Go to feed
       router.replace("/feed")
-    } catch (e: any) {
+    } catch {
       setError("Verification failed. Please try again.")
     } finally {
       setLoading(false)
@@ -67,19 +57,16 @@ export default function VerifyIdPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center">
-      <div className="p-8 max-w-md w-full space-y-4">
-        <h1 className="text-xl font-bold">Upload your College ID</h1>
-        <p className="text-sm text-muted-foreground">
-          We will scan your ID to unlock your branch rooms.
-        </p>
+      <div className="space-y-4 max-w-md w-full">
+        <h1 className="text-xl font-bold">Upload College ID</h1>
 
         <input
           type="file"
           accept="image/*"
-          onChange={e => setFile(e.target.files?.[0] || null)}
+          onChange={(e) => setFile(e.target.files?.[0] || null)}
         />
 
-        {error && <p className="text-red-500 text-sm">{error}</p>}
+        {error && <p className="text-red-500">{error}</p>}
 
         <Button onClick={submit} disabled={loading} className="w-full">
           {loading ? "Verifying..." : "Verify ID"}
