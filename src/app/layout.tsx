@@ -1,16 +1,15 @@
+import '../styles/globals.css';
+import type { Metadata } from 'next';
+import { Inter } from 'next/font/google';
+import { Toaster } from 'sonner';
 
-import type { Metadata } from "next";
-import { Inter } from "next/font/google";
-import LenisProvider from '@/components/LenisProvider';
-import "./globals.css";
-
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: "YCCE Confession Wall",
-  description: "Anonymous confession platform for YCCE students",
+  title: 'YCCE Confession Wall',
+  description: 'Anonymous confession platform for YCCE students',
   icons: {
-    icon: "/logo.png",
+    icon: '../../public/favicon_io/',
   },
 };
 
@@ -21,8 +20,12 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
+      <head>
+        <link rel="icon" href="/favicon_io/favicon.ico" />
+      </head>
       <body className={inter.className}>
-        <LenisProvider>{children}</LenisProvider>
+        {children}
+        <Toaster position="top-center" richColors />
       </body>
     </html>
   );

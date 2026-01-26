@@ -1,370 +1,141 @@
-"use client";
+'use client';
 
-import { useState, useRef, memo } from "react";
-import {
-  Heart,
-  Clock,
-  MessageCircle,
-  CornerDownLeft,
-  Send,
-  X,
-  Trash2,
-  ChevronDown,
-} from "lucide-react";
-import { formatTimeAgo } from "@/lib/utils/helpers";
-import { motion, useScroll, useTransform, AnimatePresence } from "framer-motion";
+import { useState, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Heart, MessageCircle, Send, Share2 } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
+import { ReplyThread } from './ReplyThread';
+import { toast } from 'sonner';
+
+type ConfessionCardProps = {
+  confession: any;
+  currentUserId?: string;
+  onLike: () => void;
+  onReply: (text: string, parentId?: string) => void;
+  onReplyLike: (replyId: string, confessionId: string, isLiked: boolean) => void;
+  onDelete: () => void;
+  onDeleteReply: (replyId: string, confessionId: string) => void;
+  replyTree: any[];
+};
 
 export function ConfessionCard({ 
   confession, 
+  currentUserId, 
   onLike, 
   onReply, 
-  onLikeReply, 
+  onReplyLike,
+  onDelete, 
   onDeleteReply,
-  onDeleteConfession // Added prop for deleting main confession
-}: any) {
-  const [showComments, setShowComments] = useState(false);
-  const [rootReplyText, setRootReplyText] = useState("");
-  const [activeReplyId, setActiveReplyId] = useState<string | null>(null);
-  const [nestedReplyText, setNestedReplyText] = useState("");
+  replyTree 
+}: ConfessionCardProps) {
+  const [showReplies, setShowReplies] = useState(false);
+  const [replyText, setReplyText] = useState('');
+  const [showHeartOverlay, setShowHeartOverlay] = useState(false);
   
-  // Default limit 4
-  const [visibleReplies, setVisibleReplies] = useState(4);
-  const [visibleMap, setVisibleMap] = useState<Record<string, number>>({});
+  const isOwner = currentUserId === confession.user_id;
+  const lastClickTime = useRef(0);
+  const touchTimer = useRef<NodeJS.Timeout | null>(null);
 
-  const ref = useRef<HTMLDivElement>(null);
-  const lastTap = useRef(0); // For main card double tap
-
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ["start end", "end start"],
-  });
-
-  const y = useTransform(scrollYProgress, [0, 1], [40, 0]);
-  const scale = useTransform(scrollYProgress, [0, 1], [0.95, 1]);
-
-  // Helper to check 10-minute window
-  const canDelete = (createdAt: string) => {
-    const diff = Date.now() - new Date(createdAt).getTime();
-    return diff < 10 * 60 * 1000; // 10 minutes in milliseconds
+  const checkDeleteEligibility = () => {
+    if (!isOwner) return false;
+    const minutesOld = (new Date().getTime() - new Date(confession.created_at).getTime()) / (1000 * 60);
+    if (minutesOld > 10) {
+      toast.error("Can't delete after 10 minutes!");
+      return false;
+    }
+    return true;
   };
 
-  const replies = confession.confession_replies || [];
-  const uniqueReplies = Array.from(
-    new Map(replies.map((r: any) => [r.id, r])).values()
-  );
-
-  function buildTree(replies: any[]) {
-    const map: any = {};
-    replies.forEach((r) => (map[r.id] = { ...r, children: [] }));
-    replies.forEach((r) => {
-      if (r.parent_reply_id && map[r.parent_reply_id]) {
-        map[r.parent_reply_id].children.push(map[r.id]);
-      }
-    });
-    // Sort children: Newest first (Recent)
-    Object.values(map).forEach((n: any) =>
-      n.children.sort(
-        (a: any, b: any) =>
-          new Date(b.created_at).getTime() -
-          new Date(a.created_at).getTime()
-      )
-    );
-    // Sort roots: Newest first (Recent)
-    return Object.values(map)
-      .filter((r: any) => !r.parent_reply_id)
-      .sort(
-        (a: any, b: any) =>
-          new Date(b.created_at).getTime() -
-          new Date(a.created_at).getTime()
-      );
-  }
-
-  const replyTree = buildTree(uniqueReplies);
-
-  const ReplyNode = memo(function ReplyNode({ reply, depth = 0 }: any) {
-    const isReplying = activeReplyId === reply.id;
-    const isLiked = reply.liked_by_me;
-    const visible = visibleMap[reply.id] ?? 4;
-    
-    const replyTap = useRef(0);
-
-    const handleDoubleTap = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      const now = Date.now();
-      if (now - replyTap.current < 300) {
-         // Trigger backend like ONLY if not already liked
-         // This prevents "unliking" on double tap
-         if(!isLiked && onLikeReply) {
-             onLikeReply(reply.id);
-         }
-      }
-      replyTap.current = now;
-    };
-
-    return (
-      <div
-        className="flex flex-col relative"
-        style={{ marginLeft: depth > 0 ? 16 : 0 }}
-      >
-        {depth > 0 && (
-          <div className="absolute -left-3 top-0 bottom-0 w-px bg-zinc-800" />
-        )}
-
-        <div className="mt-3 relative">
-          {depth > 0 && (
-            <div className="absolute -left-3 top-3 w-2 h-px bg-zinc-800" />
-          )}
-
-          <div
-            onClick={handleDoubleTap}
-            // Logic for thin red border when liked
-            className={`relative rounded-lg px-3 py-2 text-xs text-zinc-200 overflow-hidden group select-none transition-all duration-300 ${
-              isLiked 
-                ? "bg-zinc-800/40 border border-red-500/50 shadow-[0_0_10px_-5px_rgba(239,68,68,0.3)]" 
-                : "bg-zinc-800/40 border border-zinc-800/50"
-            }`}
-          >
-             {/* 1. Subtle Red Glow Background for Liked State */}
-             <AnimatePresence>
-                {isLiked && (
-                  <motion.div
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 0.05 }}
-                    exit={{ opacity: 0 }}
-                    className="pointer-events-none absolute inset-0 bg-red-500 rounded-lg"
-                  />
-                )}
-             </AnimatePresence>
-
-            <div className="break-words relative z-10">{reply.content}</div>
-
-            <div className="flex items-center justify-between mt-1.5 relative z-10">
-              <div className="flex items-center gap-3">
-                <span className="text-[10px] text-zinc-500">
-                  {formatTimeAgo(new Date(reply.created_at))}
-                </span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setActiveReplyId(isReplying ? null : reply.id);
-                    setNestedReplyText("");
-                  }}
-                  className={`flex items-center gap-1 text-[10px] hover:text-blue-400 transition-colors ${isReplying ? 'text-blue-400 font-bold' : 'text-zinc-500'}`}
-                >
-                  <CornerDownLeft size={10} /> Reply
-                </button>
-                 
-                 {/* Delete Button for Replies - 10 Min Limit */}
-                 {reply.is_mine && onDeleteReply && canDelete(reply.created_at) && (
-                    <button
-                      onClick={(e) => {
-                         e.stopPropagation();
-                         if(confirm("Delete this reply?")) onDeleteReply(reply.id);
-                      }}
-                      className="text-zinc-600 hover:text-red-400 transition-colors"
-                      title="Delete reply"
-                    >
-                      <Trash2 size={10} />
-                    </button>
-                  )}
-              </div>
-
-               <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    // Keep existing toggle logic for single click
-                    if(onLikeReply) onLikeReply(reply.id);
-                  }}
-                  className={`flex items-center gap-1 text-[10px] font-medium transition-colors ${
-                    isLiked ? "text-red-500" : "text-zinc-600 hover:text-red-400"
-                  }`}
-                >
-                   {reply.like_count > 0 && <span>{reply.like_count}</span>}
-                   <Heart size={10} className={isLiked ? "fill-red-500 text-red-500" : ""} />
-                </button>
-            </div>
-          </div>
-
-          {/* NESTED INPUT BOX */}
-          {isReplying && (
-            <div className="mt-2 ml-1 overflow-hidden">
-              <div className="flex gap-2">
-                <input
-                  autoFocus
-                  value={nestedReplyText}
-                  onChange={(e) => setNestedReplyText(e.target.value)}
-                  placeholder="Write a reply..."
-                  className="flex-1 bg-zinc-900 border border-zinc-700 rounded-md px-3 py-1.5 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-blue-500/50 transition-colors"
-                />
-                <button
-                  onClick={() => {
-                    if (!nestedReplyText.trim()) return;
-                    onReply(confession.id, nestedReplyText, reply.id);
-                    setActiveReplyId(null);
-                    setNestedReplyText("");
-                  }}
-                  className="bg-blue-600 hover:bg-blue-500 text-white p-2 rounded-md transition-colors"
-                >
-                  <Send size={14} />
-                </button>
-                <button
-                  onClick={() => setActiveReplyId(null)}
-                  className="text-zinc-500 hover:text-zinc-300 p-2"
-                >
-                  <X size={14} />
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* RECENT REPLIES LOGIC (Recursion) */}
-        {reply.children.slice(0, visible).map((c: any) => (
-          <ReplyNode key={c.id} reply={c} depth={depth + 1} />
-        ))}
-
-        {reply.children.length > visible && (
-          <button
-            onClick={() =>
-              setVisibleMap((prev) => ({
-                ...prev,
-                [reply.id]: (prev[reply.id] ?? 4) + 4,
-              }))
-            }
-            className="flex items-center gap-1 text-xs text-blue-400 ml-6 mt-2 hover:underline"
-          >
-            Show {reply.children.length - visible} more replies <ChevronDown size={10} />
-          </button>
-        )}
-      </div>
-    );
-  });
+  const triggerDelete = () => {
+    if (checkDeleteEligibility()) {
+      toast("Delete this confession?", {
+        action: { label: "Delete", onClick: onDelete },
+        cancel: { label: "Cancel" },
+        style: { background: '#fef2f2', color: '#dc2626' }
+      });
+    }
+  };
 
   return (
     <motion.div
-      ref={ref}
-      style={{ y, scale }}
-      onClick={(e) => {
-        // Prevent collapsing if clicking interactive elements
-        if ((e.target as HTMLElement).closest("button") || (e.target as HTMLElement).closest("input")) return;
-        
-        // Double tap logic for MAIN CONFESSION
+      layout
+      onClick={() => {
         const now = Date.now();
-        if (now - lastTap.current < 300) {
-          // Only like if not already liked (Strictly Like Only)
-          if (!confession.liked_by_me && onLike) {
-            onLike(confession.id);
-          }
+        if (now - lastClickTime.current < 300 && !confession.is_liked_by_user) {
+          onLike();
+          setShowHeartOverlay(true);
+          setTimeout(() => setShowHeartOverlay(false), 800);
         }
-        lastTap.current = now;
+        lastClickTime.current = now;
       }}
-      className="bg-zinc-900/80 border border-zinc-800 rounded-xl px-4 py-3 space-y-2 relative overflow-hidden"
+      onContextMenu={(e) => { if (isOwner) { e.preventDefault(); triggerDelete(); } }}
+      onTouchStart={() => { if (isOwner) touchTimer.current = setTimeout(triggerDelete, 800); }}
+      onTouchEnd={() => { if (touchTimer.current) clearTimeout(touchTimer.current); }}
+      className="bg-white dark:bg-zinc-900/90 border border-gray-100 dark:border-zinc-800 rounded-3xl p-5 shadow-sm hover:shadow-md transition-all relative overflow-hidden select-none"
     >
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-xs text-zinc-400">
-          <span className="text-white font-medium">
-            {confession.anonymous_username || "Anonymous"}
-          </span>
-          <Clock size={11} />
-          {formatTimeAgo(new Date(confession.created_at))}
-        </div>
-
-        {/* Delete Button for Main Confession - 10 Min Limit */}
-        {confession.is_mine && onDeleteConfession && canDelete(confession.created_at) && (
-          <button
-            onClick={(e) => {
-               e.stopPropagation();
-               if(confirm("Delete this confession?")) onDeleteConfession(confession.id);
-            }}
-            className="text-zinc-600 hover:text-red-400 transition-colors"
-            title="Delete confession"
-          >
-            <Trash2 size={12} />
-          </button>
+      <AnimatePresence>
+        {showHeartOverlay && (
+          <motion.div initial={{ scale: 0, opacity: 0 }} animate={{ scale: 1.2, opacity: 1 }} exit={{ scale: 0, opacity: 0 }} className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
+            <Heart className="w-24 h-24 text-pink-500 fill-current drop-shadow-2xl" />
+          </motion.div>
         )}
+      </AnimatePresence>
+
+      <div className="flex justify-between items-start mb-3">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-purple-500 to-pink-500 p-[2px]">
+            <div className="w-full h-full rounded-full bg-white dark:bg-zinc-900 flex items-center justify-center">
+              <span className="text-sm font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-500 to-pink-500">
+                {confession.anonymous_username?.[0]?.toUpperCase() || 'A'}
+              </span>
+            </div>
+          </div>
+          <div>
+            <h3 className="font-bold text-gray-900 dark:text-white text-sm">{confession.anonymous_username}</h3>
+            <p className="text-xs text-gray-500">{formatDistanceToNow(new Date(confession.created_at), { addSuffix: true })}</p>
+          </div>
+        </div>
       </div>
 
-      <p className="text-sm text-zinc-200 leading-relaxed">{confession.content}</p>
+      <div className="mb-4 pl-1">
+        <p className="text-gray-700 dark:text-gray-200 whitespace-pre-wrap">{confession.content}</p>
+      </div>
 
-      <div className="flex gap-4 text-xs pt-1">
-        <button
-          onClick={(e) => {
-             e.stopPropagation();
-             onLike(confession.id);
-          }}
-          className={`flex items-center gap-1 transition-colors ${
-            confession.liked_by_me
-              ? "text-red-500"
-              : "text-zinc-400 hover:text-red-500"
-          }`}
-        >
-          <Heart
-            size={14}
-            className={`transition-transform ${
-              confession.liked_by_me ? "fill-red-500 text-red-500 scale-110" : ""
-            }`}
-          />
-          {confession.reaction_count || 0}
-        </button>
-
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowComments((v) => !v);
-          }}
-          className={`flex items-center gap-1 transition-colors ${showComments ? 'text-blue-400' : 'text-zinc-400 hover:text-blue-400'}`}
-        >
-          <MessageCircle size={14} />
-          {confession.reply_count || 0}
-        </button>
+      <div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-zinc-800">
+        <div className="flex items-center gap-4">
+          <button onClick={(e) => { e.stopPropagation(); onLike(); }} className={`flex items-center gap-1.5 text-sm font-medium ${confession.is_liked_by_user ? 'text-pink-500' : 'text-gray-500 dark:text-gray-400'}`}>
+            <Heart className={`w-5 h-5 ${confession.is_liked_by_user ? 'fill-current' : ''}`} />
+            <span>{confession.likes_count}</span>
+          </button>
+          <button onClick={(e) => { e.stopPropagation(); setShowReplies(!showReplies); }} className="flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-purple-500">
+            <MessageCircle className="w-5 h-5" />
+            <span>{confession.replies_count}</span>
+          </button>
+        </div>
+        <button className="text-gray-400 hover:text-gray-600"><Share2 className="w-5 h-5" /></button>
       </div>
 
       <AnimatePresence>
-        {showComments && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.3, ease: "easeOut" }}
-            className="overflow-hidden"
-            onClick={e => e.stopPropagation()}
-          >
-            <div className="pt-3 mt-2 border-t border-zinc-800/50">
-              <div className="flex gap-2 mb-4">
-                <input
-                  value={rootReplyText}
-                  onChange={(e) => setRootReplyText(e.target.value)}
-                  placeholder="Write a comment..."
-                  className="flex-1 bg-zinc-950 border border-zinc-800 rounded-md px-3 py-2 text-sm text-white focus:outline-none focus:border-zinc-700 transition-colors"
-                />
-                <button
-                  onClick={() => {
-                    if (!rootReplyText.trim()) return;
-                    onReply(confession.id, rootReplyText, null);
-                    setRootReplyText("");
-                  }}
-                  className="bg-white text-black px-3 py-1.5 rounded-md text-xs font-bold hover:bg-zinc-200 transition-colors"
-                >
-                  Post
-                </button>
+        {showReplies && (
+          <motion.div initial={{ height: 0 }} animate={{ height: 'auto' }} exit={{ height: 0 }} className="overflow-hidden" onClick={e => e.stopPropagation()}>
+            <div className="pt-4 mt-2 space-y-4 border-t border-gray-100 dark:border-zinc-800 border-dashed">
+              <form onSubmit={(e) => { e.preventDefault(); if(replyText.trim()) { onReply(replyText); setReplyText(''); } }} className="relative">
+                <input value={replyText} onChange={e => setReplyText(e.target.value)} placeholder="Add a comment..." className="w-full bg-gray-50 dark:bg-zinc-800 border border-gray-200 dark:border-zinc-700 rounded-xl px-4 py-3 pr-12 text-sm outline-none focus:border-purple-500" />
+                <button type="submit" disabled={!replyText.trim()} className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-purple-500 text-white rounded-lg"><Send className="w-3 h-3" /></button>
+              </form>
+              <div className="space-y-4 pl-1">
+                {replyTree.length > 0 ? replyTree.map(reply => (
+                  <ReplyThread 
+                    key={reply.id} 
+                    reply={reply} 
+                    confessionId={confession.id}
+                    currentUserId={currentUserId} 
+                    onReply={(txt, pid) => onReply(txt, pid)} 
+                    onLike={onReplyLike}
+                    onDelete={onDeleteReply}
+                  />
+                )) : <p className="text-center text-sm text-gray-400 py-2">No replies yet.</p>}
               </div>
-
-              {replyTree.length > 0 ? (
-                replyTree.slice(0, visibleReplies).map((r: any) => (
-                  <ReplyNode key={r.id} reply={r} />
-                ))
-              ) : (
-                <div className="text-center py-4 text-xs text-zinc-600">No comments yet.</div>
-              )}
-
-              {replyTree.length > visibleReplies && (
-                <button
-                  onClick={() => setVisibleReplies((v) => v + 4)}
-                  className="w-full py-2 flex items-center justify-center gap-1 text-xs text-zinc-500 hover:text-white hover:bg-zinc-800/50 rounded-lg transition-colors mt-2"
-                >
-                  Show {replyTree.length - visibleReplies} more replies <ChevronDown size={12} />
-                </button>
-              )}
             </div>
           </motion.div>
         )}

@@ -1,91 +1,64 @@
+'use client';
 
-
-'use client'
-
-import { useEffect, useState } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import type { User } from '@supabase/supabase-js'
-
-export interface Profile {
-  id: string
-  email: string
-  anonymous_username: string
-  anonymous_avatar: string | null
-  is_verified: boolean
-  is_banned: boolean
-  role: string
-  department: string | null
-  year: number | null
-}
+import { useState, useEffect } from 'react';
+import { createClient } from '../supabase/client'; // Fixed relative path
+import type { User } from '@supabase/supabase-js';
 
 export function useAuth() {
-  const [user, setUser] = useState<User | null>(null)
-  const [profile, setProfile] = useState<Profile | null>(null)
-  const [loading, setLoading] = useState(true)
-
-  const supabase = createClient()
+  const [user, setUser] = useState<User | null>(null);
+  const [profile, setProfile] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+  const supabase = createClient();
 
   useEffect(() => {
-    // Initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        loadProfile(session.user.id)
-      } else {
-        setLoading(false)
+    const getUser = async () => {
+      try {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        
+        if (authUser) {
+          setUser(authUser);
+          
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', authUser.id)
+            .single();
+            
+          setProfile(profileData);
+        }
+      } catch (error) {
+        console.error("Error loading auth:", error);
+      } finally {
+        setLoading(false);
       }
-    })
+    };
 
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        loadProfile(session.user.id)
-      } else {
-        setProfile(null)
-        setLoading(false)
+    getUser();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (_event, session) => {
+        setUser(session?.user ?? null);
+        if (session?.user) {
+           const { data } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+           setProfile(data);
+        } else {
+           setProfile(null);
+        }
+        setLoading(false);
       }
-    })
+    );
 
-    return () => subscription.unsubscribe()
-  }, [])
+    return () => subscription.unsubscribe();
+  }, []); // Remove dependency on supabase to prevent loops, client is stable
 
-  async function loadProfile(userId: string) {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle()   // 🔥 IMPORTANT FIX
-
-      if (error) {
-        console.error('Profile fetch error:', error)
-        setProfile(null)
-      } else {
-        setProfile(data)
-      }
-    } catch (err) {
-      console.error('Error loading profile:', err)
-      setProfile(null)
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function signOut() {
-    await supabase.auth.signOut()
-  }
-
-  return {
-    user,
-    profile,
-    loading,
-    signOut,
-    isAuthenticated: !!user,
-    isVerified: profile?.is_verified ?? false,
-    isAdmin: profile?.role === 'admin',
-    isModerator: profile?.role === 'moderator' || profile?.role === 'admin',
-  }
+  return { 
+    user, 
+    profile, 
+    isVerified: profile?.is_verified ?? false, 
+    loading 
+  };
 }
