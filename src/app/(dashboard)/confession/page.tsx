@@ -38,8 +38,13 @@ export default function FeedPage() {
     await createConfession(newPost);
     setNewPost('');
     setIsPosting(false);
-    // Scroll to top
+    // Only scroll to top when creating a NEW confession
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleReply = async (confessionId: string, text: string, parentId?: string | null) => {
+    await addReply(confessionId, text, parentId || null);
+    // REMOVED: window.scrollTo call so the screen stays where the user is typing
   };
 
   return (
@@ -57,10 +62,10 @@ export default function FeedPage() {
               confession={confession}
               currentUserId={user?.id}
               onLike={() => likeConfession(confession.id, confession.is_liked_by_user)}
-              onReply={(text: string, parentId?: string) => addReply(confession.id, text, parentId || null)}
-              onReplyLike={(rid: any, cid: any, status: any) => likeReply(rid, cid, status)}
+              onReply={(text: string, parentId?: string) => handleReply(confession.id, text, parentId)}
+              onReplyLike={(rid: any, status: any) => likeReply(rid, confession.id, status)}
               onDelete={() => deleteConfession(confession.id)}
-              onDeleteReply={(rid: any, cid: any) => deleteReply(rid, cid)}
+              onReplyDelete={(rid: any) => deleteReply(rid, confession.id)}
               replyTree={getRepliesTree(confession.replies || [])} 
             />
           ))}
