@@ -138,7 +138,6 @@ export function useConfessions() {
 
   // --- Realtime Subscription ---
   useEffect(() => {
-    // Helper to fetch a single NEW confession fully populated
     const fetchAndAppendConfession = async (id: string) => {
         const { data: { user } } = await supabase.auth.getUser();
         
@@ -158,10 +157,7 @@ export function useConfessions() {
 
         if (error || !data) return;
 
-        // FIX: Cast data to any to bypass 'never' type inference error
         const newData = data as any;
-
-        // Fetch Username
         let anonymous_username = 'Anonymous';
         if (newData.user_id) {
             const { data: profile } = await supabase
@@ -169,11 +165,9 @@ export function useConfessions() {
                 .select('anonymous_username')
                 .eq('id', newData.user_id)
                 .single();
-            // FIX: Cast profile to any to access anonymous_username property
             if (profile) anonymous_username = (profile as any).anonymous_username;
         }
 
-        // Poll Logic (Simplified for new post)
         let pollData: Poll | undefined = undefined;
         if (newData.polls && newData.polls.length > 0) {
             const rawPoll = newData.polls[0];
@@ -197,35 +191,104 @@ export function useConfessions() {
         };
 
         setConfessions(prev => {
-            // Deduplicate: If we already added it (e.g. via our own createConfession), don't add again
             if (prev.find(c => c.id === formatted.id)) return prev;
             return [formatted, ...prev];
         });
     };
 
+    const handleReplyInsert = async (payload: any) => {
+        const newReply = payload.new;
+        let anonymous_username = 'Anonymous';
+        if (newReply.user_id) {
+            const { data } = await supabase.from('profiles').select('anonymous_username').eq('id', newReply.user_id).single();
+            if (data) anonymous_username = (data as any).anonymous_username;
+        }
+        
+        const formattedReply: Reply = {
+            ...newReply,
+            anonymous_username,
+            likes_count: 0,
+            is_liked_by_user: false,
+            children: []
+        };
+
+        setConfessions(prev => prev.map(c => {
+            if (c.id === newReply.confession_id) {
+                // Prevent duplicate if added by optimistic UI
+                if (c.replies?.find(r => r.id === newReply.id)) return c;
+                return {
+                    ...c,
+                    replies_count: (c.replies_count || 0) + 1,
+                    replies: [formattedReply, ...(c.replies || [])]
+                };
+            }
+            return c;
+        }));
+    };
+
     const channel = supabase
       .channel('feed_realtime')
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'confessions' },
-        (payload) => {
-           fetchAndAppendConfession(payload.new.id);
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: 'DELETE', schema: 'public', table: 'confessions' },
-        (payload) => {
-           setConfessions(prev => prev.filter(c => c.id !== payload.old.id));
-        }
-      )
+      // 1. Confessions: Insert & Delete
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'confessions' }, (payload) => fetchAndAppendConfession(payload.new.id))
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'confessions' }, (payload) => setConfessions(prev => prev.filter(c => c.id !== payload.old.id)))
+      
+      // 2. Replies: Insert & Delete
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'confession_replies' }, handleReplyInsert)
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'confession_replies' }, (payload) => {
+         setConfessions(prev => prev.map(c => {
+             // We check if this confession contained the reply. Note: payload.old might only contain 'id'
+             if (c.replies?.some(r => r.id === payload.old.id)) {
+                 return {
+                     ...c,
+                     replies_count: Math.max(0, (c.replies_count || 1) - 1),
+                     replies: c.replies.filter(r => r.id !== payload.old.id)
+                 };
+             }
+             return c;
+         }));
+      })
+
+      // 3. Confession Likes: Insert & Delete
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'confession_likes' }, (payload) => {
+          setConfessions(prev => prev.map(c => c.id === payload.new.confession_id ? { ...c, likes_count: c.likes_count + 1 } : c));
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'confession_likes' }, (payload) => {
+          // Note: payload.old.confession_id required. If Supabase doesn't send it, this won't update.
+          if(payload.old && (payload.old as any).confession_id) {
+            setConfessions(prev => prev.map(c => c.id === (payload.old as any).confession_id ? { ...c, likes_count: Math.max(0, c.likes_count - 1) } : c));
+          }
+      })
+
+      // 4. Poll Votes: Insert
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'poll_votes' }, (payload) => {
+         const { poll_id, option_index } = payload.new;
+         setConfessions(prev => prev.map(c => {
+             if(c.poll && c.poll.id === poll_id) {
+                 const currentPoll = c.poll;
+                 const newVotes = [...currentPoll.votes_by_option];
+                 if(option_index < newVotes.length) {
+                     newVotes[option_index]++;
+                 }
+                 // FIX: Added 'as Confession' to map return to prevent Type incompatibility error with optional 'poll' field
+                 return {
+                     ...c,
+                     poll: {
+                         ...currentPoll,
+                         total_votes: currentPoll.total_votes + 1,
+                         votes_by_option: newVotes
+                     }
+                 } as Confession;
+             }
+             return c;
+         }));
+      })
+
       .subscribe();
 
     return () => {
         supabase.removeChannel(channel);
     };
-  }, []);
-
+  }, [supabase]);
 
   // --- 2. Build Reply Tree ---
   const getRepliesTree = (replies: Reply[]) => {
@@ -253,7 +316,6 @@ export function useConfessions() {
   };
 
   // --- 3. Actions ---
-  
   const createConfession = async (content: string, pollOptions?: string[]) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -277,10 +339,8 @@ export function useConfessions() {
 
       let newPoll: Poll | undefined = undefined;
       if (pollOptions && pollOptions.length >= 2) {
-        // FIX: Added 'as any' to payload to bypass strict type checking for polls table
         const { data: pollData } = await supabase.from('polls').insert({ confession_id: (confessionData as any).id, options: pollOptions } as any).select().single();
         if (pollData) {
-          // Cast to any to handle 'never' type inference
           const pd = pollData as any;
           newPoll = {
             id: pd.id,
@@ -304,7 +364,6 @@ export function useConfessions() {
     if (user.id === targetUserId) return toast.error("You can't chat with yourself!");
 
     try {
-      // Check if active chat already exists
       const { data: existingChat } = await supabase
         .from('private_chats')
         .select('id')
@@ -314,13 +373,10 @@ export function useConfessions() {
         .single();
 
       if (existingChat) {
-        // FIX: Cast to any to handle 'never' type inference for existingChat
         router.push(`/chat/${(existingChat as any).id}`);
         return;
       }
 
-      // Create new chat
-      // FIX: Added 'as any' to payload to bypass strict type checking for private_chats table
       const { data, error } = await supabase.from('private_chats').insert({
         created_by: user.id,
         participant_2: targetUserId,
@@ -330,7 +386,6 @@ export function useConfessions() {
       if (error) throw error;
       
       toast.success('Private chat started (10 mins)');
-      // FIX: Cast to any here too for the new chat data
       router.push(`/chat/${(data as any).id}`);
     } catch (e) {
       console.error(e);
@@ -339,7 +394,6 @@ export function useConfessions() {
   };
 
   const likeReply = async (replyId: string, confessionId: string, currentStatus: boolean) => {
-    // Optimistic Update
     setConfessions(prev => prev.map(c => {
       if (c.id === confessionId) {
         return {
@@ -390,7 +444,6 @@ export function useConfessions() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return toast.error("Sign in to vote");
     setConfessions(prev => prev.map(c => { if (c.id === confessionId && c.poll) { const newVotes = [...c.poll.votes_by_option]; newVotes[optionIndex]++; return { ...c, poll: { ...c.poll, user_vote_index: optionIndex, total_votes: c.poll.total_votes + 1, votes_by_option: newVotes } }; } return c; }));
-    // FIX: Added 'as any' to payload to bypass strict type checking for poll_votes table
     await supabase.from('poll_votes').insert({ poll_id: pollId, user_id: user.id, option_index: optionIndex } as any);
   };
 
@@ -407,7 +460,7 @@ export function useConfessions() {
     voteOnPoll,
     deleteConfession, 
     deleteReply, 
-    startPrivateChat, // Export new function
+    startPrivateChat,
     getRepliesTree 
   };
 }
