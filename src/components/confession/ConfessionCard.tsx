@@ -50,7 +50,7 @@ export function ConfessionCard({
     if (checkDeleteEligibility()) {
       toast("Delete this confession?", {
         action: { label: "Delete", onClick: onDelete },
-        cancel: { label: "Cancel" },
+        cancel: { label: "Cancel", onClick: () => {} },
         style: { background: '#fef2f2', color: '#dc2626' }
       });
     }

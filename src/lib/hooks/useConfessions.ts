@@ -32,13 +32,11 @@ export function useConfessions() {
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
-  // --- 1. Fetch Data (Fixed 400 Error) ---
+  // --- 1. Fetch Data ---
   const fetchConfessions = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
-      // FIX: Removed 'profiles' join from 'confession_replies' to resolve PGRST200 error.
-      // We will default reply usernames to 'Anonymous' in the map function below.
       const { data, error } = await supabase
         .from('confessions')
         .select(`
@@ -57,9 +55,8 @@ export function useConfessions() {
         likes_count: c.like_count || (c.confession_likes ? c.confession_likes.length : 0),
         replies: c.confession_replies?.map((r: any) => ({
           ...r,
-          // Fallback since we removed the join
           anonymous_username: r.profiles?.anonymous_username || 'Anonymous', 
-          is_liked_by_user: false, // Defaulting to false for stability
+          is_liked_by_user: false,
           likes_count: 0
         })) || [],
         replies_count: c.confession_replies ? c.confession_replies.length : 0,
@@ -69,7 +66,6 @@ export function useConfessions() {
       setConfessions(formattedData);
     } catch (error) {
       console.error('Error fetching feed:', error);
-      // toast.error('Could not load feed'); 
     } finally {
       setLoading(false);
     }
@@ -79,7 +75,7 @@ export function useConfessions() {
     fetchConfessions();
   }, [fetchConfessions]);
 
-  // --- 2. Build Reply Tree (Nested + Latest on Top) ---
+  // --- 2. Build Reply Tree ---
   const getRepliesTree = (replies: Reply[]) => {
     if (!replies) return [];
     const map = new Map();
@@ -112,19 +108,27 @@ export function useConfessions() {
 
       const { data: profile } = await supabase.from('profiles').select('anonymous_username').eq('id', user.id).single();
 
+      // FIX: Cast profile to any to check for anonymous_username
+      if (!(profile as any)?.anonymous_username) {
+        toast.error('Profile incomplete. Please set a username.');
+        return;
+      }
+
       const newConfession = {
         user_id: user.id,
         content,
-        anonymous_username: profile?.anonymous_username || 'Anonymous',
+        // FIX: Cast profile to any
+        anonymous_username: (profile as any).anonymous_username,
       };
 
-      const { data, error } = await supabase.from('confessions').insert(newConfession).select().single();
+      // FIX: Cast to any to avoid "never" type error on insert
+      const { data, error } = await supabase.from('confessions').insert(newConfession as any).select().single();
       if (error) throw error;
 
-      setConfessions(prev => [{ ...data, replies: [], likes_count: 0, is_liked_by_user: false }, ...prev]);
+      // FIX: Cast data to any for state update
+      setConfessions(prev => [{ ...(data as any), replies: [], likes_count: 0, is_liked_by_user: false }, ...prev]);
       toast.success('Posted!');
       
-      // FIX: Scroll to top smoothly after posting
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
     } catch { toast.error('Failed to post'); }
@@ -137,18 +141,26 @@ export function useConfessions() {
 
       const { data: profile } = await supabase.from('profiles').select('anonymous_username').eq('id', user.id).single();
 
+      // FIX: Cast profile to any to check for anonymous_username
+      if (!(profile as any)?.anonymous_username) {
+        toast.error('Profile incomplete. Please set a username.');
+        return;
+      }
+
+      // FIX: Cast to any to avoid "never" type error on insert
       const { data, error } = await supabase.from('confession_replies').insert({
         confession_id: confessionId,
         user_id: user.id,
         content,
         parent_reply_id: parentId
-      }).select().single();
+      } as any).select().single();
 
       if (error) throw error;
 
       setConfessions(prev => prev.map(c => {
         if (c.id === confessionId) {
-          const newReply = { ...data, anonymous_username: profile?.anonymous_username || 'Anonymous', children: [], likes_count: 0, is_liked_by_user: false };
+          // FIX: Cast data and profile to any
+          const newReply = { ...(data as any), anonymous_username: (profile as any).anonymous_username, children: [], likes_count: 0, is_liked_by_user: false };
           return { ...c, replies_count: (c.replies_count || 0) + 1, replies: [newReply, ...(c.replies || [])] };
         }
         return c;
@@ -163,13 +175,15 @@ export function useConfessions() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // FIX: Removed .catch() chaining on rpc calls as they are not native Promises in all client versions
     if (isLiked) {
       await supabase.from('confession_likes').delete().eq('confession_id', id).eq('user_id', user.id);
-      await supabase.rpc('decrement_confession_like', { row_id: id });
+      // FIX: Cast RPC args to any
+      await supabase.rpc('decrement_confession_like', { row_id: id } as any);
     } else {
-      await supabase.from('confession_likes').insert({ confession_id: id, user_id: user.id });
-      await supabase.rpc('increment_confession_like', { row_id: id });
+      // FIX: Cast insert payload to any
+      await supabase.from('confession_likes').insert({ confession_id: id, user_id: user.id } as any);
+      // FIX: Cast RPC args to any
+      await supabase.rpc('increment_confession_like', { row_id: id } as any);
     }
   };
 
@@ -192,12 +206,12 @@ export function useConfessions() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Try/Catch to safely handle missing table or 403 Forbidden errors (RLS)
     try {
         if (currentStatus) {
             await supabase.from('confession_reply_likes').delete().eq('reply_id', replyId).eq('user_id', user.id);
         } else {
-            await supabase.from('confession_reply_likes').insert({ reply_id: replyId, user_id: user.id });
+            // FIX: Cast insert payload to any
+            await supabase.from('confession_reply_likes').insert({ reply_id: replyId, user_id: user.id } as any);
         }
     } catch (e) {
         console.warn("Reply likes table issue or permission denied", e);

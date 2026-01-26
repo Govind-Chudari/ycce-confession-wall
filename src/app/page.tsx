@@ -1,13 +1,13 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { motion, Variants } from 'framer-motion';
 import { MessageSquare, Shield, Zap, ArrowRight, Sparkles, Lock } from 'lucide-react';
 import Link from 'next/link';
 
 export default function LandingPage() {
   
   // Animation Variants for Staggered Entry
-  const containerVariants = {
+  const containerVariants: Variants = {
     hidden: { opacity: 0 },
     visible: {
       opacity: 1,
@@ -18,7 +18,7 @@ export default function LandingPage() {
     }
   };
 
-  const itemVariants = {
+  const itemVariants: Variants = {
     hidden: { y: 30, opacity: 0, scale: 0.95 },
     visible: {
       y: 0,
@@ -151,7 +151,7 @@ export default function LandingPage() {
   );
 }
 
-function FeatureCard({ icon: Icon, title, description, color, delay }: any) {
+function FeatureCard({ icon: Icon, title, description, color, delay }: { icon: any, title: string, description: string, color: string, delay: number }) {
   return (
     <motion.div
       variants={{

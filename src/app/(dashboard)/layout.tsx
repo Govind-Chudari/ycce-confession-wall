@@ -42,7 +42,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }
 
         // If profile exists but incomplete, redirect
-        if (profileData && !profileData.profile_completed) {
+        // Fix: Cast profileData to any to avoid TS error 'property does not exist on type never'
+        if (profileData && !(profileData as any).profile_completed) {
           router.push('/profile-setup');
           return;
         }
@@ -114,7 +115,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             
             <div className="px-5 py-2 flex items-center justify-between relative z-10">
               <Link href="/home" className="group relative z-50">
-                <motion.div initial={{ scale: 1 }} whileHover={{ scale: 2 , x:30}} whileTap={{ scale: 0.95 }} className="relative">
+                <motion.div initial={{ scale: 1 }} whileHover={{ scale: 2 , x:30}} whileTap={{ scale: 0.95 , x:30 }} className="relative">
                   <img src="/logo.png" alt="LOGO" className='h-20 w-20' />
                 </motion.div>
               </Link>

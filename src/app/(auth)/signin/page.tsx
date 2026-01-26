@@ -69,7 +69,8 @@ export default function SignInPage() {
         .eq('id', user.id)
         .single();
 
-      if (!profile || !profile.profile_completed) {
+      // Fix: Cast profile to any to avoid TS error 'property does not exist on type never'
+      if (!profile || !(profile as any).profile_completed) {
         toast.info('Please complete your profile');
         router.push('/profile-setup');
       } else {

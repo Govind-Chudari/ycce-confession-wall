@@ -69,7 +69,7 @@ export function ReplyThread({
     if (checkDeleteEligibility()) {
       toast("Delete this comment?", {
         action: { label: "Delete", onClick: () => onDelete(reply.id, confessionId) },
-        cancel: { label: "Cancel" },
+        cancel: { label: "Cancel", onClick: () => {} },
         style: { background: '#fef2f2', color: '#dc2626' }
       });
     }
