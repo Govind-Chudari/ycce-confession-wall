@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '../supabase/client';
 import { toast } from 'sonner';
-import { useRouter } from 'next/navigation'; // Import router for navigation
+import { useRouter } from 'next/navigation';
 
 export type Reply = {
   id: string;
@@ -41,7 +41,7 @@ export function useConfessions() {
   const [confessions, setConfessions] = useState<Confession[]>([]);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
-  const router = useRouter(); // Initialize router
+  const router = useRouter();
 
   // --- 1. Fetch Data ---
   const fetchConfessions = useCallback(async () => {
@@ -135,6 +135,97 @@ export function useConfessions() {
   useEffect(() => {
     fetchConfessions();
   }, [fetchConfessions]);
+
+  // --- Realtime Subscription ---
+  useEffect(() => {
+    // Helper to fetch a single NEW confession fully populated
+    const fetchAndAppendConfession = async (id: string) => {
+        const { data: { user } } = await supabase.auth.getUser();
+        
+        const { data, error } = await supabase
+            .from('confessions')
+            .select(`
+            *,
+            confession_likes (user_id),
+            polls (
+                id,
+                options,
+                poll_votes (user_id, option_index)
+            )
+            `)
+            .eq('id', id)
+            .single();
+
+        if (error || !data) return;
+
+        // FIX: Cast data to any to bypass 'never' type inference error
+        const newData = data as any;
+
+        // Fetch Username
+        let anonymous_username = 'Anonymous';
+        if (newData.user_id) {
+            const { data: profile } = await supabase
+                .from('profiles')
+                .select('anonymous_username')
+                .eq('id', newData.user_id)
+                .single();
+            // FIX: Cast profile to any to access anonymous_username property
+            if (profile) anonymous_username = (profile as any).anonymous_username;
+        }
+
+        // Poll Logic (Simplified for new post)
+        let pollData: Poll | undefined = undefined;
+        if (newData.polls && newData.polls.length > 0) {
+            const rawPoll = newData.polls[0];
+            pollData = {
+                id: rawPoll.id,
+                options: rawPoll.options,
+                total_votes: 0,
+                user_vote_index: null,
+                votes_by_option: new Array(rawPoll.options.length).fill(0)
+            };
+        }
+
+        const formatted: Confession = {
+            ...newData,
+            likes_count: 0,
+            replies: [],
+            replies_count: 0,
+            is_liked_by_user: false,
+            poll: pollData,
+            anonymous_username
+        };
+
+        setConfessions(prev => {
+            // Deduplicate: If we already added it (e.g. via our own createConfession), don't add again
+            if (prev.find(c => c.id === formatted.id)) return prev;
+            return [formatted, ...prev];
+        });
+    };
+
+    const channel = supabase
+      .channel('feed_realtime')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'confessions' },
+        (payload) => {
+           fetchAndAppendConfession(payload.new.id);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'confessions' },
+        (payload) => {
+           setConfessions(prev => prev.filter(c => c.id !== payload.old.id));
+        }
+      )
+      .subscribe();
+
+    return () => {
+        supabase.removeChannel(channel);
+    };
+  }, []);
+
 
   // --- 2. Build Reply Tree ---
   const getRepliesTree = (replies: Reply[]) => {
@@ -316,7 +407,7 @@ export function useConfessions() {
     voteOnPoll,
     deleteConfession, 
     deleteReply, 
-    startPrivateChat, 
+    startPrivateChat, // Export new function
     getRepliesTree 
   };
 }
