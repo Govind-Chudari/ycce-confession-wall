@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { createClient } from '../supabase/client';
 import { toast } from 'sonner';
+import { useRouter } from 'next/navigation'; // Import router for navigation
 
 export type Reply = {
   id: string;
@@ -10,9 +11,17 @@ export type Reply = {
   created_at: string;
   parent_reply_id: string | null;
   likes_count: number;
-  anonymous_username: string;
-  is_liked_by_user: boolean;
+  anonymous_username?: string;
+  is_liked_by_user?: boolean;
   children?: Reply[];
+};
+
+export type Poll = {
+  id: string;
+  options: string[];
+  total_votes: number;
+  user_vote_index: number | null; 
+  votes_by_option: number[]; 
 };
 
 export type Confession = {
@@ -25,44 +34,47 @@ export type Confession = {
   replies_count: number;
   is_liked_by_user: boolean;
   replies?: Reply[];
+  poll?: Poll;
 };
 
 export function useConfessions() {
   const [confessions, setConfessions] = useState<Confession[]>([]);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
+  const router = useRouter(); // Initialize router
 
   // --- 1. Fetch Data ---
   const fetchConfessions = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
-      // FIX 1: Removed complex 'profiles:user_id' join that was breaking the query.
-      // Now we just fetch confessions, their replies, and the likes for both.
-      const { data: confessionsData, error: confessionsError } = await supabase
+      const { data, error } = await supabase
         .from('confessions')
         .select(`
           *,
-          confession_likes (user_id),
           confession_replies (
             *,
             confession_reply_likes (user_id)
+          ),
+          confession_likes (user_id),
+          polls (
+            id,
+            options,
+            poll_votes (user_id, option_index)
           )
         `)
         .order('created_at', { ascending: false });
 
-      if (confessionsError) throw confessionsError;
+      if (error) throw error;
 
-      // FIX 2: Manually collect User IDs from all replies to fetch their usernames
-      // This bypasses the need for a strict Foreign Key relationship in the schema
+      // --- Manual Profile Fetch ---
       const userIdsToFetch = new Set<string>();
-      confessionsData.forEach((c: any) => {
+      data.forEach((c: any) => {
         c.confession_replies?.forEach((r: any) => {
           if (r.user_id) userIdsToFetch.add(r.user_id);
         });
       });
 
-      // FIX 3: Fetch profiles for those IDs
       let profilesMap = new Map<string, string>();
       if (userIdsToFetch.size > 0) {
         const { data: profilesData } = await supabase
@@ -75,36 +87,46 @@ export function useConfessions() {
         });
       }
 
-      // 4. Merge Data
-      const formattedData = confessionsData.map((c: any) => {
-        // Format Replies
-        const rawReplies = c.confession_replies || [];
-        const sortedReplies = rawReplies.sort((a: any, b: any) => 
-            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-        );
-
-        const mappedReplies = sortedReplies.map((r: any) => ({
-            ...r,
-            // Hydrate username from our manual map
-            anonymous_username: profilesMap.get(r.user_id) || 'Anonymous', 
-            // Calculate likes
-            likes_count: r.confession_reply_likes ? r.confession_reply_likes.length : 0,
-            is_liked_by_user: user ? r.confession_reply_likes?.some((l: any) => l.user_id === user.id) : false
-        }));
+      const formattedData = data.map((c: any) => {
+        // Poll Logic
+        let pollData: Poll | undefined = undefined;
+        if (c.polls && c.polls.length > 0) {
+          const rawPoll = c.polls[0];
+          const votes = rawPoll.poll_votes || [];
+          const userVote = user ? votes.find((v: any) => v.user_id === user.id) : undefined;
+          const counts = new Array(rawPoll.options.length).fill(0);
+          votes.forEach((v: any) => {
+            if (v.option_index >= 0 && v.option_index < counts.length) {
+              counts[v.option_index]++;
+            }
+          });
+          pollData = {
+            id: rawPoll.id,
+            options: rawPoll.options,
+            total_votes: votes.length,
+            user_vote_index: userVote !== undefined ? userVote.option_index : null,
+            votes_by_option: counts
+          };
+        }
 
         return {
-            ...c,
-            likes_count: c.like_count || (c.confession_likes ? c.confession_likes.length : 0),
-            replies: mappedReplies,
-            replies_count: mappedReplies.length,
-            is_liked_by_user: user ? c.confession_likes?.some((l: any) => l.user_id === user.id) : false,
+          ...c,
+          likes_count: c.like_count || (c.confession_likes ? c.confession_likes.length : 0),
+          replies: c.confession_replies?.map((r: any) => ({
+            ...r,
+            anonymous_username: profilesMap.get(r.user_id) || 'Anonymous', 
+            likes_count: r.confession_reply_likes ? r.confession_reply_likes.length : 0,
+            is_liked_by_user: user ? r.confession_reply_likes?.some((l: any) => l.user_id === user.id) : false
+          })) || [],
+          replies_count: c.confession_replies ? c.confession_replies.length : 0,
+          is_liked_by_user: user ? c.confession_likes?.some((l: any) => l.user_id === user.id) : false,
+          poll: pollData
         };
       });
 
       setConfessions(formattedData);
     } catch (error) {
       console.error('Error fetching feed:', error);
-      toast.error('Could not load confessions');
     } finally {
       setLoading(false);
     }
@@ -117,33 +139,31 @@ export function useConfessions() {
   // --- 2. Build Reply Tree ---
   const getRepliesTree = (replies: Reply[]) => {
     if (!replies) return [];
-    
-    // Deep clone to prevent mutating state
-    const repliesCopy = JSON.parse(JSON.stringify(replies));
     const map = new Map();
     const roots: Reply[] = [];
     
-    // Initialize map
-    repliesCopy.forEach((r: any) => {
-      r.children = [];
-      map.set(r.id, r);
+    // Sort oldest first
+    const sortedReplies = [...replies].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+    sortedReplies.forEach(r => {
+      map.set(r.id, { ...r, children: [] });
     });
 
-    // Build hierarchy
-    repliesCopy.forEach((r: any) => {
+    sortedReplies.forEach(r => {
+      const node = map.get(r.id);
       if (r.parent_reply_id && map.has(r.parent_reply_id)) {
-        map.get(r.parent_reply_id).children.push(r);
+        map.get(r.parent_reply_id).children.push(node);
       } else {
-        roots.push(r);
+        roots.push(node);
       }
     });
     
-    return roots; // Roots are already sorted by date from the fetch step
+    return roots;
   };
 
   // --- 3. Actions ---
   
-  const createConfession = async (content: string) => {
+  const createConfession = async (content: string, pollOptions?: string[]) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return toast.error('Sign in required');
@@ -161,73 +181,69 @@ export function useConfessions() {
         anonymous_username: (profile as any).anonymous_username,
       };
 
-      const { data, error } = await supabase.from('confessions').insert(newConfession as any).select().single();
-      if (error) throw error;
+      const { data: confessionData, error: confError } = await supabase.from('confessions').insert(newConfession as any).select().single();
+      if (confError) throw confError;
 
-      setConfessions(prev => [{ ...(data as any), replies: [], likes_count: 0, is_liked_by_user: false }, ...prev]);
+      let newPoll: Poll | undefined = undefined;
+      if (pollOptions && pollOptions.length >= 2) {
+        // FIX: Added 'as any' to payload to bypass strict type checking for polls table
+        const { data: pollData } = await supabase.from('polls').insert({ confession_id: (confessionData as any).id, options: pollOptions } as any).select().single();
+        if (pollData) {
+          // Cast to any to handle 'never' type inference
+          const pd = pollData as any;
+          newPoll = {
+            id: pd.id,
+            options: pd.options,
+            total_votes: 0,
+            user_vote_index: null,
+            votes_by_option: new Array(pd.options.length).fill(0)
+          };
+        }
+      }
+
+      setConfessions(prev => [{ ...(confessionData as any), replies: [], likes_count: 0, is_liked_by_user: false, poll: newPoll }, ...prev]);
       toast.success('Posted!');
-      
       window.scrollTo({ top: 0, behavior: 'smooth' });
-
     } catch { toast.error('Failed to post'); }
   };
 
-  const addReply = async (confessionId: string, content: string, parentId: string | null = null) => {
+  const startPrivateChat = async (targetUserId: string, confessionId: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return toast.error('Sign in to chat');
+    if (user.id === targetUserId) return toast.error("You can't chat with yourself!");
+
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return toast.error('Sign in required');
+      // Check if active chat already exists
+      const { data: existingChat } = await supabase
+        .from('private_chats')
+        .select('id')
+        .or(`and(created_by.eq.${user.id},participant_2.eq.${targetUserId}),and(created_by.eq.${targetUserId},participant_2.eq.${user.id})`)
+        .eq('status', 'active')
+        .gt('expires_at', new Date().toISOString())
+        .single();
 
-      const { data: profile } = await supabase.from('profiles').select('anonymous_username').eq('id', user.id).single();
-
-      if (!(profile as any)?.anonymous_username) {
-        toast.error('Profile incomplete. Please set a username.');
+      if (existingChat) {
+        // FIX: Cast to any to handle 'never' type inference for existingChat
+        router.push(`/chat/${(existingChat as any).id}`);
         return;
       }
 
-      const { data, error } = await supabase.from('confession_replies').insert({
-        confession_id: confessionId,
-        user_id: user.id,
-        content,
-        parent_reply_id: parentId
+      // Create new chat
+      // FIX: Added 'as any' to payload to bypass strict type checking for private_chats table
+      const { data, error } = await supabase.from('private_chats').insert({
+        created_by: user.id,
+        participant_2: targetUserId,
+        confession_id: confessionId
       } as any).select().single();
 
       if (error) throw error;
-
-      setConfessions(prev => prev.map(c => {
-        if (c.id === confessionId) {
-          const newReply: Reply = { 
-            ...(data as any), 
-            anonymous_username: (profile as any).anonymous_username, 
-            children: [], 
-            likes_count: 0, 
-            is_liked_by_user: false 
-          };
-          
-          return { 
-            ...c, 
-            replies_count: (c.replies_count || 0) + 1, 
-            replies: [...(c.replies || []), newReply] // Add to end
-          };
-        }
-        return c;
-      }));
-      toast.success('Reply sent');
-    } catch { toast.error('Failed to reply'); }
-  };
-
-  const likeConfession = async (id: string, isLiked: boolean) => {
-    // Optimistic
-    setConfessions(prev => prev.map(c => c.id === id ? { ...c, is_liked_by_user: !isLiked, likes_count: isLiked ? Math.max(0, c.likes_count - 1) : c.likes_count + 1 } : c));
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    if (isLiked) {
-      await supabase.from('confession_likes').delete().eq('confession_id', id).eq('user_id', user.id);
-      await supabase.rpc('decrement_confession_like', { row_id: id } as any);
-    } else {
-      await supabase.from('confession_likes').insert({ confession_id: id, user_id: user.id } as any);
-      await supabase.rpc('increment_confession_like', { row_id: id } as any);
+      
+      toast.success('Private chat started (10 mins)');
+      // FIX: Cast to any here too for the new chat data
+      router.push(`/chat/${(data as any).id}`);
+    } catch (e) {
+      console.error(e);
+      toast.error('Failed to start chat');
     }
   };
 
@@ -237,7 +253,6 @@ export function useConfessions() {
       if (c.id === confessionId) {
         return {
           ...c,
-          // We update the flat list; getRepliesTree will handle the nesting on render
           replies: c.replies?.map(r => r.id === replyId ? {
             ...r,
             is_liked_by_user: !currentStatus,
@@ -258,38 +273,38 @@ export function useConfessions() {
             await supabase.from('confession_reply_likes').insert({ reply_id: replyId, user_id: user.id } as any);
         }
     } catch (e) {
-        console.warn("Reply likes table issue", e);
+        console.warn("Reply likes issue", e);
     }
   };
 
-  const deleteConfession = async (id: string) => {
-    const { error } = await supabase.from('confessions').delete().eq('id', id);
-    if (!error) {
-      setConfessions(prev => prev.filter(c => c.id !== id));
-      toast.success('Deleted');
-    } else {
-        toast.error('Delete failed');
-    }
+  const addReply = async (confessionId: string, content: string, parentId: string | null = null) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return toast.error('Sign in required');
+      const { data: profile } = await supabase.from('profiles').select('anonymous_username').eq('id', user.id).single();
+      const { data, error } = await supabase.from('confession_replies').insert({ confession_id: confessionId, user_id: user.id, content, parent_reply_id: parentId } as any).select().single();
+      if (error) throw error;
+      setConfessions(prev => prev.map(c => { if (c.id === confessionId) { const newReply = { ...(data as any), anonymous_username: (profile as any).anonymous_username, children: [], likes_count: 0, is_liked_by_user: false }; return { ...c, replies_count: (c.replies_count || 0) + 1, replies: [newReply, ...(c.replies || [])] }; } return c; }));
+      toast.success('Reply sent');
   };
 
-  const deleteReply = async (replyId: string, confessionId: string) => {
-    const { error } = await supabase.from('confession_replies').delete().eq('id', replyId);
-    if (!error) {
-        setConfessions(prev => prev.map(c => {
-            if (c.id === confessionId) {
-                return {
-                    ...c,
-                    replies_count: Math.max(0, (c.replies_count || 1) - 1),
-                    replies: c.replies?.filter(r => r.id !== replyId)
-                };
-            }
-            return c;
-        }));
-        toast.success('Reply deleted');
-    } else {
-        toast.error('Delete failed');
-    }
+  const likeConfession = async (id: string, isLiked: boolean) => {
+    setConfessions(prev => prev.map(c => c.id === id ? { ...c, is_liked_by_user: !isLiked, likes_count: isLiked ? Math.max(0, c.likes_count - 1) : c.likes_count + 1 } : c));
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    if (isLiked) { await supabase.from('confession_likes').delete().eq('confession_id', id).eq('user_id', user.id); await supabase.rpc('decrement_confession_like', { row_id: id } as any); } 
+    else { await supabase.from('confession_likes').insert({ confession_id: id, user_id: user.id } as any); await supabase.rpc('increment_confession_like', { row_id: id } as any); }
   };
+
+  const voteOnPoll = async (pollId: string, confessionId: string, optionIndex: number) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return toast.error("Sign in to vote");
+    setConfessions(prev => prev.map(c => { if (c.id === confessionId && c.poll) { const newVotes = [...c.poll.votes_by_option]; newVotes[optionIndex]++; return { ...c, poll: { ...c.poll, user_vote_index: optionIndex, total_votes: c.poll.total_votes + 1, votes_by_option: newVotes } }; } return c; }));
+    // FIX: Added 'as any' to payload to bypass strict type checking for poll_votes table
+    await supabase.from('poll_votes').insert({ poll_id: pollId, user_id: user.id, option_index: optionIndex } as any);
+  };
+
+  const deleteConfession = async (id: string) => { await supabase.from('confessions').delete().eq('id', id); setConfessions(prev => prev.filter(c => c.id !== id)); };
+  const deleteReply = async (replyId: string, confessionId: string) => { await supabase.from('confession_replies').delete().eq('id', replyId); setConfessions(prev => prev.map(c => { if (c.id === confessionId) { return { ...c, replies_count: Math.max(0, (c.replies_count || 1) - 1), replies: c.replies?.filter(r => r.id !== replyId) }; } return c; })); };
 
   return { 
     confessions, 
@@ -298,8 +313,10 @@ export function useConfessions() {
     addReply, 
     likeConfession, 
     likeReply, 
+    voteOnPoll,
     deleteConfession, 
     deleteReply, 
+    startPrivateChat, 
     getRepliesTree 
   };
 }

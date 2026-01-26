@@ -2,9 +2,10 @@
 
 import { useConfessions } from '@/lib/hooks/useConfessions';
 import { ConfessionCard } from '@/components/confession/ConfessionCard'; 
-import { Loader2, Send } from 'lucide-react';
+import { Loader2, Send, BarChart2, X, Plus } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function FeedPage() {
   const { 
@@ -16,6 +17,7 @@ export default function FeedPage() {
     addReply, 
     deleteConfession,
     deleteReply,
+    voteOnPoll, 
     getRepliesTree 
   } = useConfessions();
 
@@ -23,6 +25,10 @@ export default function FeedPage() {
   const [newPost, setNewPost] = useState('');
   const [isPosting, setIsPosting] = useState(false);
   
+  // Poll State
+  const [isPollMode, setIsPollMode] = useState(false);
+  const [pollOptions, setPollOptions] = useState(['', '']);
+
   // Auto-resize textarea logic
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
@@ -35,20 +41,42 @@ export default function FeedPage() {
   const handlePost = async () => {
     if (!newPost.trim()) return;
     setIsPosting(true);
-    await createConfession(newPost);
+
+    const validOptions = pollOptions.filter(o => o.trim() !== '');
+    if (isPollMode && validOptions.length < 2) {
+      alert("Please provide at least 2 options for the poll.");
+      setIsPosting(false);
+      return;
+    }
+
+    await createConfession(newPost, isPollMode ? validOptions : undefined);
+    
     setNewPost('');
+    setPollOptions(['', '']);
+    setIsPollMode(false);
     setIsPosting(false);
-    // Only scroll to top when creating a NEW confession
+    
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleReply = async (confessionId: string, text: string, parentId?: string | null) => {
-    await addReply(confessionId, text, parentId || null);
-    // REMOVED: window.scrollTo call so the screen stays where the user is typing
+  const updateOption = (index: number, val: string) => {
+    const newOpts = [...pollOptions];
+    newOpts[index] = val;
+    setPollOptions(newOpts);
+  };
+
+  const addOption = () => {
+    if (pollOptions.length < 4) setPollOptions([...pollOptions, '']);
+  };
+
+  const removeOption = (index: number) => {
+    if (pollOptions.length > 2) {
+      setPollOptions(pollOptions.filter((_, i) => i !== index));
+    }
   };
 
   return (
-    <div className="max-w-2xl mx-auto pt-10 pb-44">
+    <div className="max-w-2xl mx-auto pt-10 pb-52">
       {/* --- FEED LIST --- */}
       {loading ? (
         <div className="flex justify-center py-20">
@@ -62,10 +90,12 @@ export default function FeedPage() {
               confession={confession}
               currentUserId={user?.id}
               onLike={() => likeConfession(confession.id, confession.is_liked_by_user)}
-              onReply={(text: string, parentId?: string) => handleReply(confession.id, text, parentId)}
-              onReplyLike={(rid: any, status: any) => likeReply(rid, confession.id, status)}
+              onReply={(text: string, parentId?: string) => addReply(confession.id, text, parentId || null)}
+              onReplyLike={(rid: string, isLiked: boolean) => likeReply(rid, confession.id, isLiked)}
               onDelete={() => deleteConfession(confession.id)}
-              onReplyDelete={(rid: any) => deleteReply(rid, confession.id)}
+              /* FIX: Use confession.id from closure, as ConfessionCard only passes rid */
+              onReplyDelete={(rid: string) => deleteReply(rid, confession.id)}
+              onVote={(pollId, idx) => voteOnPoll(pollId, confession.id, idx)}
               replyTree={getRepliesTree(confession.replies || [])} 
             />
           ))}
@@ -80,28 +110,15 @@ export default function FeedPage() {
         </div>
       )}
 
-      {/* --- FIXED BOTTOM INPUT BOX (Premium Glow Design) --- */}
+      {/* --- INPUT BOX --- */}
       <div className="fixed bottom-6 left-0 right-0 z-40 px-4 pointer-events-none">
         <div className="max-w-2xl mx-auto pointer-events-auto">
-          
-          {/* Main Container with Gradient Glow */}
           <div className="relative group">
-            {/* The Animated Glow Layer */}
             <div className="absolute -inset-1 bg-gradient-to-r from-purple-600 via-pink-600 to-blue-600 rounded-[2.5rem] opacity-30 blur-xl group-hover:opacity-50 transition duration-1000 group-hover:duration-200"></div>
             
-            {/* The Content Box */}
-            <div className="
-              relative
-              bg-white/90 dark:bg-black/90               
-              backdrop-blur-2xl                           
-              border border-white/20 dark:border-zinc-800 
-              rounded-[2rem]                           
-              p-4                                        
-              shadow-2xl
-              flex flex-col gap-3
-            ">
+            <div className="relative bg-white/90 dark:bg-black/90 backdrop-blur-2xl border border-white/20 dark:border-zinc-800 rounded-[2rem] p-4 shadow-2xl flex flex-col gap-3">
               
-              {/* Input Area */}
+              {/* Text Input */}
               <div className="flex items-end gap-3">
                 <div className="flex-1 pl-1">
                   <textarea
@@ -113,6 +130,16 @@ export default function FeedPage() {
                     rows={1}
                   />
                 </div>
+                
+                {/* Poll Toggle Button */}
+                <button 
+                  onClick={() => setIsPollMode(!isPollMode)}
+                  className={`p-2 rounded-xl transition-all ${isPollMode ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/30' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800'}`}
+                >
+                  <BarChart2 className="w-5 h-5" />
+                </button>
+
+                {/* Post Button */}
                 <button
                   onClick={handlePost}
                   disabled={isPosting || !newPost.trim()}
@@ -122,7 +149,62 @@ export default function FeedPage() {
                 </button>
               </div>
               
-              {/* Divider & Privacy Badge */}
+              {/* Poll Options UI */}
+              <AnimatePresence>
+                {isPollMode && (
+                  <motion.div 
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="pt-4 pb-2 space-y-3 border-t border-dashed border-gray-200 dark:border-zinc-800 mt-2">
+                        <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 ml-1">Poll Options</p>
+                        {pollOptions.map((opt, i) => (
+                          <div key={i} className="flex gap-2 items-center">
+                            <div className="flex-1 relative group">
+                              {/* Number Badge */}
+                              <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
+                                <span className="text-xs text-gray-400 font-medium font-mono bg-gray-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">
+                                  {i + 1}
+                                </span>
+                              </div>
+                              <input 
+                                value={opt}
+                                onChange={(e) => updateOption(i, e.target.value)}
+                                placeholder={`Option ${i + 1}`}
+                                className="w-full bg-gray-50 dark:bg-black/40 border border-gray-200 dark:border-zinc-700 rounded-xl pl-10 pr-4 py-2.5 text-sm outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/50 transition-all text-gray-700 dark:text-gray-200 placeholder:text-gray-400"
+                                autoFocus={i === pollOptions.length - 1 && i > 1}
+                              />
+                            </div>
+                            
+                            {pollOptions.length > 2 && (
+                              <button 
+                                onClick={() => removeOption(i)} 
+                                className="p-2.5 bg-gray-50 dark:bg-zinc-800/50 border border-gray-200 dark:border-zinc-700 rounded-xl text-gray-400 hover:text-red-500 hover:border-red-500/30 hover:bg-red-50 dark:hover:bg-red-900/10 transition-all"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        
+                        {pollOptions.length < 4 && (
+                          <button 
+                            onClick={addOption} 
+                            className="w-full py-2.5 border-2 border-dashed border-gray-200 dark:border-zinc-800 rounded-xl text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-purple-500 hover:border-purple-500/50 hover:bg-purple-50 dark:hover:bg-purple-900/10 transition-all flex items-center justify-center gap-2 group"
+                          >
+                            <span className="bg-gray-100 dark:bg-zinc-800 rounded-full p-0.5 group-hover:bg-purple-100 dark:group-hover:bg-purple-900/50 transition-colors">
+                              <Plus className="w-3 h-3" />
+                            </span>
+                            Add Another Option
+                          </button>
+                        )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
               <div className="border-t border-gray-100 dark:border-zinc-800 pt-3 flex items-center justify-center gap-2">
                  <span className="relative flex h-2 w-2">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
@@ -135,10 +217,8 @@ export default function FeedPage() {
 
             </div>
           </div>
-          
         </div>
       </div>
-
     </div>
   );
 }

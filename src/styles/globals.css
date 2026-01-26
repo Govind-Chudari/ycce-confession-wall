@@ -1,7 +1,17 @@
+/* 1. Import Comic Neue FIRST (Must precede Tailwind/other rules) */
+@import url('https://fonts.googleapis.com/css2?family=Comic+Neue:wght@300;400;700&display=swap');
+
+/* 2. Tailwind Base */
 @import "tailwindcss";
 
+/* 3. Apply Robust Font Stack */
 * {
-  font-family: "Comic Sans MS", "Comic Sans", cursive !important;
+  /* - Comic Neue: Loads on Android/Web.
+     - Comic Sans MS: Windows default.
+     - Chalkboard SE: iOS/macOS default (Apple's Comic Sans).
+     - sans-serif: Fallback (Prevents ugly script fonts on older Androids).
+  */
+  font-family: "Comic Neue", "Comic Sans MS", "Chalkboard SE", "Comic Sans", sans-serif !important;
 }
 
 @layer base {
@@ -74,5 +84,3 @@
 .animate-like {
   animation: like-pop 0.4s ease-in-out;
 }
-
-

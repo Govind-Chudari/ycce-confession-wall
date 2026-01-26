@@ -11,19 +11,45 @@ type ReplyProps = {
   currentUserId?: string;
   onReply: (text: string, parentId: string) => void;
   onLike: (replyId: string, isLiked: boolean) => void;
-  onDelete?: (replyId: string) => void;
+  // UPDATE: Added optional confessionId to the type definition
+  onDelete?: (replyId: string, confessionId?: string) => void;
   depth?: number;
 };
 
 export function ReplyThread({ reply, currentUserId, onReply, onLike, onDelete, depth = 0 }: ReplyProps) {
   const [isReplying, setIsReplying] = useState(false);
   const [replyText, setReplyText] = useState('');
-  const touchTimer = useRef<NodeJS.Timeout | null>(null);
+  const [showHeartOverlay, setShowHeartOverlay] = useState(false);
   
-  const displayName = reply.anonymous_username || 'Anonymous';
-  const isOwner = currentUserId && reply.user_id === currentUserId;
-  const likesCount = reply.likes_count || 0;
-  const hasLiked = !!reply.is_liked_by_user;
+  const lastTapTime = useRef(0);
+  const touchTimer = useRef<NodeJS.Timeout | null>(null);
+
+  const profileData = 
+    (Array.isArray(reply.profiles) ? reply.profiles[0] : reply.profiles) || 
+    reply.profile || 
+    reply.user ||
+    reply.author;
+
+  const displayName = 
+    reply.anonymous_username || 
+    profileData?.anonymous_username || 
+    'Anonymous';
+  
+  const isOwner = currentUserId && reply.user_id 
+    ? String(currentUserId) === String(reply.user_id) 
+    : false;
+
+  const likesCount = 
+    typeof reply.likes_count === 'number' ? reply.likes_count :
+    reply.confession_reply_likes?.length ?? 
+    reply.reply_likes?.length ?? 
+    (Array.isArray(reply.likes) ? reply.likes.length : 0);
+
+  const hasLiked = 
+    typeof reply.is_liked_by_user === 'boolean' ? reply.is_liked_by_user : 
+    reply.confession_reply_likes?.some((l: any) => String(l.user_id) === String(currentUserId)) ??
+    reply.reply_likes?.some((l: any) => String(l.user_id) === String(currentUserId)) ??
+    false;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,14 +59,31 @@ export function ReplyThread({ reply, currentUserId, onReply, onLike, onDelete, d
     setIsReplying(false);
   };
 
+  const handleDoubleTap = (e: React.MouseEvent | React.TouchEvent) => {
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 300;
+
+    if (now - lastTapTime.current < DOUBLE_TAP_DELAY) {
+        e.stopPropagation(); 
+        if (!currentUserId) {
+            toast.error("Sign in to like");
+            return;
+        }
+        
+        if (!hasLiked) {
+             onLike(reply.id, hasLiked);
+        }
+        
+        setShowHeartOverlay(true);
+        setTimeout(() => setShowHeartOverlay(false), 800);
+    }
+    lastTapTime.current = now;
+  };
+
   const checkDeleteEligibility = () => {
     if (!isOwner) return false;
-    
-    const created = new Date(reply.created_at).getTime();
-    const now = new Date().getTime();
-    const diffInMinutes = (now - created) / (1000 * 60);
-
-    if (diffInMinutes > 10) {
+    const minutesSinceCreation = (new Date().getTime() - new Date(reply.created_at).getTime()) / (1000 * 60);
+    if (minutesSinceCreation > 10) {
       toast.error("Can't delete after 10 minutes!");
       return false;
     }
@@ -49,28 +92,25 @@ export function ReplyThread({ reply, currentUserId, onReply, onLike, onDelete, d
 
   const handleDelete = () => {
     if (!onDelete) return;
-
     if (checkDeleteEligibility()) {
         toast("Delete this reply?", {
-            action: {
-                label: "Delete",
-                onClick: () => onDelete(reply.id)
-            },
-            cancel: { label: "Cancel" },
+            // FIX: Passing reply.confession_id so the parent knows which confession to update
+            action: { label: "Delete", onClick: () => onDelete(reply.id, reply.confession_id) },
+            cancel: { label: "Cancel", onClick: () => {} }, // Added empty onClick to satisfy types
             style: { background: '#fef2f2', color: '#dc2626' }
         });
     }
   };
 
-  // --- Handlers for Delete Gestures ---
+  // --- Handlers for Delete Gestures (Right Click & Hold) ---
 
   const handleContextMenu = (e: React.MouseEvent) => {
-      // 1. Prevent triggering the parent Confession Card's context menu
+      // 1. Always stop propagation so we don't trigger the parent Confession's delete menu
       e.stopPropagation();
 
-      // 2. Trigger Reply delete if owner
+      // 2. If owner, trigger local delete
       if (isOwner && onDelete) {
-          e.preventDefault();
+          e.preventDefault(); // Prevent browser context menu
           handleDelete();
       }
   };
@@ -79,7 +119,7 @@ export function ReplyThread({ reply, currentUserId, onReply, onLike, onDelete, d
       if (isOwner && onDelete) {
           touchTimer.current = setTimeout(() => {
               handleDelete();
-          }, 800);
+          }, 800); // 800ms hold to delete
       }
   };
 
@@ -90,30 +130,51 @@ export function ReplyThread({ reply, currentUserId, onReply, onLike, onDelete, d
       }
   };
 
-  // Limit nesting visual depth to prevent squishing on mobile
+  const handleTouchMove = () => {
+      // Cancel delete if user scrolls while holding
+      if (touchTimer.current) {
+          clearTimeout(touchTimer.current);
+          touchTimer.current = null;
+      }
+  };
+
   const visualDepth = Math.min(depth, 5);
 
   return (
-    <div className={`relative mt-3 ${visualDepth > 0 ? 'ml-3 md:ml-6' : ''}`}>
-      {/* Connector Line */}
+    <motion.div 
+        layout // <--- Yeh magic prop hai jo baaki elements ko smooth slide karega
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, height: 0, marginBottom: 0, overflow: 'hidden' }} // <--- Fade out aur shrink animation
+        transition={{ duration: 0.3 }}
+        className={`relative mt-3 ${visualDepth > 0 ? 'ml-3 md:ml-6' : ''}`}
+    >
       {visualDepth > 0 && (
         <div className="absolute -left-3 top-0 w-3 h-8 border-l-2 border-b-2 border-gray-200 dark:border-zinc-800 rounded-bl-xl opacity-50 pointer-events-none" />
       )}
 
-      {/* Main Card Bubble - Events attached here */}
+      {/* Main Card Bubble */}
       <div 
-        className="group bg-gray-50 dark:bg-zinc-900/50 rounded-xl p-3 border border-gray-100 dark:border-zinc-800 hover:border-purple-500/20 transition-colors select-none"
-        onContextMenu={handleContextMenu}
-        onTouchStart={handleTouchStart}
+        className="group relative bg-white/50 dark:bg-zinc-900/40 backdrop-blur-sm rounded-xl p-3 border border-gray-100 dark:border-zinc-800 hover:border-purple-500/20 transition-all hover:shadow-sm select-none"
+        onClick={handleDoubleTap}
+        onContextMenu={handleContextMenu} // Re-enabled with logic
+        onTouchStart={handleTouchStart}   // Added for Android hold
         onTouchEnd={handleTouchEnd}
-        onTouchMove={() => { 
-            // Cancel long press if user scrolls
-            if (touchTimer.current) {
-                clearTimeout(touchTimer.current);
-                touchTimer.current = null;
-            }
-        }}
+        onTouchMove={handleTouchMove}
       >
+        <AnimatePresence>
+            {showHeartOverlay && (
+                <motion.div 
+                    initial={{ scale: 0, opacity: 0 }} 
+                    animate={{ scale: 1.2, opacity: 1 }} 
+                    exit={{ scale: 0, opacity: 0 }} 
+                    className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none"
+                >
+                    <Heart className="w-12 h-12 text-pink-500 fill-current drop-shadow-xl" />
+                </motion.div>
+            )}
+        </AnimatePresence>
+
         <div className="flex items-center justify-between mb-1.5">
           <div className="flex items-center gap-2">
             <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center shadow-sm shrink-0">
@@ -129,12 +190,12 @@ export function ReplyThread({ reply, currentUserId, onReply, onLike, onDelete, d
             </span>
           </div>
 
-            {/* Owner Actions */}
+            {/* DELETE BUTTON: Visible for owner */}
             {isOwner && onDelete && (
                 <button 
                     type="button"
                     onClick={(e) => { e.stopPropagation(); handleDelete(); }}
-                    className="text-gray-400 hover:text-red-500 transition-colors p-1 opacity-0 group-hover:opacity-100 focus:opacity-100"
+                    className="text-gray-400 hover:text-red-500 transition-colors p-1.5 opacity-60 hover:opacity-100"
                     title="Delete reply"
                 >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -155,8 +216,9 @@ export function ReplyThread({ reply, currentUserId, onReply, onLike, onDelete, d
             <MessageSquare className="w-3 h-3" /> Reply
           </button>
 
-          <button 
+          <motion.button 
             type="button"
+            whileTap={{ scale: 0.8 }}
             onClick={(e) => { 
                 e.stopPropagation();
                 if (!currentUserId) {
@@ -165,13 +227,21 @@ export function ReplyThread({ reply, currentUserId, onReply, onLike, onDelete, d
                 }
                 onLike(reply.id, hasLiked); 
             }}
-            className={`text-xs font-medium flex items-center gap-1 transition-colors ${
+            className={`text-xs font-medium flex items-center gap-1 transition-colors group/heart ${
               hasLiked ? 'text-pink-500' : 'text-gray-500 hover:text-pink-500'
             }`}
           >
-            <Heart className={`w-3 h-3 ${hasLiked ? 'fill-current' : ''}`} /> 
-            {likesCount > 0 && likesCount}
-          </button>
+            <motion.div
+                key={`${likesCount}-${hasLiked}`} 
+                initial={{ scale: 1 }}
+                animate={hasLiked ? { scale: [1, 1.4, 1] } : { scale: 1 }}
+                transition={{ duration: 0.2 }}
+            >
+                <Heart className={`w-3 h-3 ${hasLiked ? 'fill-current' : ''}`} /> 
+            </motion.div>
+            
+            <span>{likesCount > 0 && likesCount}</span>
+          </motion.button>
         </div>
 
         <AnimatePresence>
@@ -182,9 +252,7 @@ export function ReplyThread({ reply, currentUserId, onReply, onLike, onDelete, d
               exit={{ height: 0, opacity: 0 }}
               onSubmit={handleSubmit}
               className="mt-3"
-              // Prevent context menu/touch events from the form triggering delete
-              onContextMenu={(e) => e.stopPropagation()}
-              onTouchStart={(e) => e.stopPropagation()}
+              onClick={e => e.stopPropagation()}
             >
               <div className="flex gap-2">
                 <input
@@ -208,23 +276,25 @@ export function ReplyThread({ reply, currentUserId, onReply, onLike, onDelete, d
         </AnimatePresence>
       </div>
 
-      {/* Recursive Children */}
+      {/* Recursive Children with AnimatePresence for smooth delete */}
       {reply.children && reply.children.length > 0 && (
         <div className="space-y-0 relative">
            <div className="absolute left-0 top-0 bottom-0 w-px bg-gray-200 dark:bg-zinc-800 -ml-3" />
-           {reply.children.map((childReply: any) => (
-            <ReplyThread
-              key={childReply.id}
-              reply={childReply}
-              currentUserId={currentUserId}
-              onReply={onReply}
-              onLike={onLike}
-              onDelete={onDelete}
-              depth={depth + 1}
-            />
-          ))}
+           <AnimatePresence mode='popLayout'>
+             {reply.children.map((childReply: any) => (
+              <ReplyThread
+                key={childReply.id}
+                reply={childReply}
+                currentUserId={currentUserId}
+                onReply={onReply}
+                onLike={onLike}
+                onDelete={onDelete} 
+                depth={depth + 1}
+              />
+            ))}
+           </AnimatePresence>
         </div>
       )}
-    </div>
+    </motion.div>
   );
 }
