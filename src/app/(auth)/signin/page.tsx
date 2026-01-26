@@ -8,29 +8,49 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Mail, Lock, ArrowRight, AlertCircle, Loader2 } from 'lucide-react';
+import { Mail, Lock, ArrowRight, AlertCircle, Loader2, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
+// Schema for Sign In
 const signInSchema = z.object({
   email: z.string().email('Invalid email').endsWith('@ycce.in', 'Must be a YCCE email'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
+// Schema for Forgot Password
+const forgotPasswordSchema = z.object({
+  email: z.string().email('Invalid email').endsWith('@ycce.in', 'Must be a YCCE email'),
+});
+
 type SignInForm = z.infer<typeof signInSchema>;
+type ForgotPasswordForm = z.infer<typeof forgotPasswordSchema>;
 
 export default function SignInPage() {
   const router = useRouter();
   const supabase = createClient();
   const [showSad, setShowSad] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [view, setView] = useState<'signin' | 'forgot'>('signin');
 
+  // Sign In Form Hooks
   const {
     register,
     handleSubmit,
     watch,
     formState: { errors, isSubmitting },
+    reset: resetSignIn
   } = useForm<SignInForm>({
     resolver: zodResolver(signInSchema),
+  });
+
+  // Forgot Password Form Hooks
+  const {
+    register: registerForgot,
+    handleSubmit: handleSubmitForgot,
+    formState: { errors: errorsForgot, isSubmitting: isSubmittingForgot },
+    reset: resetForgot
+  } = useForm<ForgotPasswordForm>({
+    resolver: zodResolver(forgotPasswordSchema),
   });
 
   useEffect(() => {
@@ -87,6 +107,23 @@ export default function SignInPage() {
     }
   };
 
+  const onForgotSubmit = async (data: ForgotPasswordForm) => {
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
+        redirectTo: `${window.location.origin}/update-password`,
+      });
+
+      if (error) throw error;
+
+      toast.success('Password reset link sent to your email');
+      setView('signin');
+      resetForgot();
+    } catch (error: any) {
+      console.error('Reset password error:', error);
+      toast.error(error.message || 'Failed to send reset link');
+    }
+  };
+
   return (
     <div className="min-h-screen w-full relative overflow-hidden flex items-center justify-center p-4 bg-gray-50 dark:bg-zinc-950 transition-colors duration-500">
       
@@ -106,7 +143,7 @@ export default function SignInPage() {
 
       <div className="relative z-10 w-full max-w-md">
         <AnimatePresence>
-          {showSad && (
+          {showSad && view === 'signin' && (
             <motion.div
               initial={{ y: 50, opacity: 0, rotate: 0 }}
               animate={{ 
@@ -133,69 +170,145 @@ export default function SignInPage() {
         </AnimatePresence>
 
         <motion.div
+          layout
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           className="bg-white/70 dark:bg-zinc-900/60 backdrop-blur-2xl border border-white/20 dark:border-white/10 rounded-[2rem] shadow-2xl p-6 md:p-8 relative z-10 overflow-hidden"
         >
           <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent pointer-events-none" />
-          <div className="relative text-center mb-6 md:mb-8">
-            <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight mb-2">Welcome Back</h1>
-            <p className="text-xs md:text-base text-gray-500 dark:text-gray-400 font-medium">Sign in to your YCCE account</p>
-          </div>
-
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-3 md:space-y-4 relative">
-            <div className="space-y-1">
-              <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1">YCCE Email</label>
-              <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <Mail className={`h-4 w-4 md:h-5 md:w-5 transition-colors ${errors.email ? 'text-red-500' : 'text-gray-400 group-focus-within:text-purple-500'}`} />
+          
+          <AnimatePresence mode="wait">
+            {view === 'signin' ? (
+              <motion.div
+                key="signin"
+                initial={{ opacity: 0, x: -20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                transition={{ duration: 0.2 }}
+              >
+                <div className="relative text-center mb-6 md:mb-8">
+                  <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight mb-2">Welcome Back</h1>
+                  <p className="text-xs md:text-base text-gray-500 dark:text-gray-400 font-medium">Sign in to your YCCE account</p>
                 </div>
-                <input
-                  {...register('email')}
-                  type="email"
-                  placeholder="yourname@ycce.in"
-                  className={`w-full pl-10 md:pl-11 pr-4 py-2.5 md:py-3.5 bg-gray-50/50 dark:bg-black/20 border-2 rounded-xl outline-none transition-all duration-300 font-medium text-sm md:text-base ${
-                    errors.email ? 'border-red-500/50 focus:border-red-500' : 'border-transparent focus:border-purple-500'
-                  } placeholder:text-gray-400 dark:text-white`}
-                />
-              </div>
-            </div>
 
-            <div className="space-y-1">
-              <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1">Password</label>
-              <div className="relative group">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <Lock className={`h-4 w-4 md:h-5 md:w-5 transition-colors ${errors.password ? 'text-red-500' : 'text-gray-400 group-focus-within:text-purple-500'}`} />
+                <form onSubmit={handleSubmit(onSubmit)} className="space-y-3 md:space-y-4 relative">
+                  <div className="space-y-1">
+                    <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1">YCCE Email</label>
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <Mail className={`h-4 w-4 md:h-5 md:w-5 transition-colors ${errors.email ? 'text-red-500' : 'text-gray-400 group-focus-within:text-purple-500'}`} />
+                      </div>
+                      <input
+                        {...register('email')}
+                        type="email"
+                        placeholder="yourname@ycce.in"
+                        className={`w-full pl-10 md:pl-11 pr-4 py-2.5 md:py-3.5 bg-gray-50/50 dark:bg-black/20 border-2 rounded-xl outline-none transition-all duration-300 font-medium text-sm md:text-base ${
+                          errors.email ? 'border-red-500/50 focus:border-red-500' : 'border-transparent focus:border-purple-500'
+                        } placeholder:text-gray-400 dark:text-white`}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-center px-1">
+                      <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Password</label>
+                      <button 
+                        type="button" 
+                        onClick={() => { setView('forgot'); setShowSad(false); }}
+                        className="text-[10px] md:text-xs font-bold text-purple-600 dark:text-purple-400 hover:text-purple-500 transition-colors"
+                      >
+                        Forgot Password?
+                      </button>
+                    </div>
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <Lock className={`h-4 w-4 md:h-5 md:w-5 transition-colors ${errors.password ? 'text-red-500' : 'text-gray-400 group-focus-within:text-purple-500'}`} />
+                      </div>
+                      <input
+                        {...register('password')}
+                        type="password"
+                        placeholder="Enter your password"
+                        className={`w-full pl-10 md:pl-11 pr-4 py-2.5 md:py-3.5 bg-gray-50/50 dark:bg-black/20 border-2 rounded-xl outline-none transition-all duration-300 font-medium text-sm md:text-base ${
+                          errors.password ? 'border-red-500/50 focus:border-red-500' : 'border-transparent focus:border-purple-500'
+                        } placeholder:text-gray-400 dark:text-white`}
+                      />
+                    </div>
+                  </div>
+
+                  <motion.button
+                    type="submit"
+                    disabled={isSubmitting}
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.98 }}
+                    className={`w-full py-3 md:py-4 rounded-xl font-bold text-white shadow-lg shadow-purple-500/25 flex items-center justify-center gap-2 transition-all duration-300 relative overflow-hidden text-sm md:text-base ${
+                      isSubmitting ? 'bg-purple-400 cursor-not-allowed' : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500'
+                    }`}
+                  >
+                    {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Sign In <ArrowRight className="w-5 h-5" /></>}
+                  </motion.button>
+                </form>
+
+                <div className="mt-6 text-center relative z-10">
+                  <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400">
+                    Don't have an account? <Link href="/signup" className="text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 font-bold hover:opacity-80 transition-opacity">Sign Up</Link>
+                  </p>
                 </div>
-                <input
-                  {...register('password')}
-                  type="password"
-                  placeholder="Enter your password"
-                  className={`w-full pl-10 md:pl-11 pr-4 py-2.5 md:py-3.5 bg-gray-50/50 dark:bg-black/20 border-2 rounded-xl outline-none transition-all duration-300 font-medium text-sm md:text-base ${
-                    errors.password ? 'border-red-500/50 focus:border-red-500' : 'border-transparent focus:border-purple-500'
-                  } placeholder:text-gray-400 dark:text-white`}
-                />
-              </div>
-            </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="forgot"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                transition={{ duration: 0.2 }}
+              >
+                <div className="relative text-center mb-6 md:mb-8">
+                  <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 dark:text-white tracking-tight mb-2">Reset Password</h1>
+                  <p className="text-xs md:text-base text-gray-500 dark:text-gray-400 font-medium">Enter your email to receive a reset link</p>
+                </div>
 
-            <motion.button
-              type="submit"
-              disabled={isSubmitting}
-              whileHover={{ scale: 1.01 }}
-              whileTap={{ scale: 0.98 }}
-              className={`w-full py-3 md:py-4 rounded-xl font-bold text-white shadow-lg shadow-purple-500/25 flex items-center justify-center gap-2 transition-all duration-300 relative overflow-hidden text-sm md:text-base ${
-                isSubmitting ? 'bg-purple-400 cursor-not-allowed' : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500'
-              }`}
-            >
-              {isSubmitting ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Sign In <ArrowRight className="w-5 h-5" /></>}
-            </motion.button>
-          </form>
+                <form onSubmit={handleSubmitForgot(onForgotSubmit)} className="space-y-3 md:space-y-4 relative">
+                  <div className="space-y-1">
+                    <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1">YCCE Email</label>
+                    <div className="relative group">
+                      <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <Mail className={`h-4 w-4 md:h-5 md:w-5 transition-colors ${errorsForgot.email ? 'text-red-500' : 'text-gray-400 group-focus-within:text-purple-500'}`} />
+                      </div>
+                      <input
+                        {...registerForgot('email')}
+                        type="email"
+                        placeholder="yourname@ycce.in"
+                        className={`w-full pl-10 md:pl-11 pr-4 py-2.5 md:py-3.5 bg-gray-50/50 dark:bg-black/20 border-2 rounded-xl outline-none transition-all duration-300 font-medium text-sm md:text-base ${
+                          errorsForgot.email ? 'border-red-500/50 focus:border-red-500' : 'border-transparent focus:border-purple-500'
+                        } placeholder:text-gray-400 dark:text-white`}
+                      />
+                    </div>
+                  </div>
 
-          <div className="mt-6 text-center relative z-10">
-            <p className="text-xs md:text-sm text-gray-500 dark:text-gray-400">
-              Don't have an account? <Link href="/signup" className="text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-pink-600 font-bold hover:opacity-80 transition-opacity">Sign Up</Link>
-            </p>
-          </div>
+                  <motion.button
+                    type="submit"
+                    disabled={isSubmittingForgot}
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.98 }}
+                    className={`w-full py-3 md:py-4 rounded-xl font-bold text-white shadow-lg shadow-purple-500/25 flex items-center justify-center gap-2 transition-all duration-300 relative overflow-hidden text-sm md:text-base ${
+                      isSubmittingForgot ? 'bg-purple-400 cursor-not-allowed' : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500'
+                    }`}
+                  >
+                    {isSubmittingForgot ? <Loader2 className="w-5 h-5 animate-spin" /> : <>Send Reset Link <ArrowRight className="w-5 h-5" /></>}
+                  </motion.button>
+                </form>
+
+                <div className="mt-6 text-center relative z-10">
+                  <button 
+                    onClick={() => { setView('signin'); resetForgot(); }}
+                    className="flex items-center justify-center gap-2 w-full text-xs md:text-sm text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+                  >
+                     <ArrowLeft className="w-4 h-4" /> Back to Sign In
+                  </button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </motion.div>
       </div>
     </div>
