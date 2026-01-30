@@ -17,7 +17,7 @@ type ConfessionCardProps = {
   onDelete: () => void;
   onReplyDelete?: (replyId: string) => void;
   onVote?: (pollId: string, optionIndex: number) => void;
-  onPrivateChat?: (targetUserId: string) => void; // New prop
+  onPrivateChat?: (targetUserId: string) => void;
   replyTree: any[];
 };
 
@@ -30,7 +30,7 @@ export function ConfessionCard({
   onDelete, 
   onReplyDelete, 
   onVote,
-  onPrivateChat, // Receive the prop
+  onPrivateChat,
   replyTree 
 }: ConfessionCardProps) {
   const [showReplies, setShowReplies] = useState(false);
@@ -83,7 +83,6 @@ export function ConfessionCard({
 
   const triggerDelete = () => {
     if (checkDeleteEligibility()) {
-      // FIX: Added required 'onClick' to cancel action to satisfy sonner types
       toast("Delete this confession?", { 
         action: { label: "Delete", onClick: onDelete }, 
         cancel: { label: "Cancel", onClick: () => {} }, 
@@ -157,7 +156,7 @@ export function ConfessionCard({
               </button>
             )}
             {isOwner && (
-                <button onClick={(e) => { e.stopPropagation(); triggerDelete(); }} className="text-gray-400 hover:text-red-500 p-2 transition-colors"><Trash2 className="w-4 h-4" /></button>
+              <button onClick={(e) => { e.stopPropagation(); triggerDelete(); }} className="text-gray-400 hover:text-red-500 p-2 transition-colors"><Trash2 className="w-4 h-4" /></button>
             )}
           </div>
         </div>
@@ -193,14 +192,15 @@ export function ConfessionCard({
                       }
                     `}
                   >
-                    <div className="flex items-center gap-2">
-                      {isSelected && <CheckCircle2 className="w-4 h-4 text-purple-600" />}
+                    {/* ✅ FIX: min-w-0 and flex-1 added here to prevent text overflow */}
+                    <div className="flex items-center gap-2 min-w-0 flex-1 text-left">
+                      {isSelected && <CheckCircle2 className="w-4 h-4 text-purple-600 flex-shrink-0" />}
                       <span className={`truncate ${isSelected ? 'text-purple-700 dark:text-purple-300' : 'text-gray-700 dark:text-gray-300'}`}>
                         {option}
                       </span>
                     </div>
                     {hasVoted && (
-                      <span className="text-xs text-gray-500 font-semibold">{percentage}%</span>
+                      <span className="text-xs text-gray-500 font-semibold ml-2 flex-shrink-0">{percentage}%</span>
                     )}
                   </button>
                 </div>

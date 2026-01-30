@@ -1,11 +1,16 @@
 'use client';
 
-import { useConfessions } from '@/lib/hooks/useConfessions';
-import { ConfessionCard } from '@/components/confession/ConfessionCard'; 
-import { Loader2, Send, BarChart2, X, Plus } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
-import { useAuth } from '@/lib/hooks/useAuth';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Loader2, Send, BarChart2, X, Plus } from 'lucide-react';
+
+// ✅ FIX: Trying 2 levels up (Safe for src/app/confession/page.tsx structure)
+// Agar yeh bhi fail hua, toh folder structure confirm karna padega.
+import { useConfessions } from '@/lib/hooks/useConfessions';
+import { usePrivateChat } from '@/lib/hooks/usePrivateChat';
+import { ConfessionCard } from '@/components/confession/ConfessionCard'; 
+import { PrivateChatModal } from '@/components/confession/privateChatModal';
+import { useAuth } from '@/lib/hooks/useAuth';
 
 export default function FeedPage() {
   const { 
@@ -22,6 +27,21 @@ export default function FeedPage() {
   } = useConfessions();
 
   const { user } = useAuth();
+  
+  // ✅ Private Chat Integration with all handlers
+  const { 
+    activeChat, 
+    chats,
+    pendingRequests,
+    initiateChat, 
+    sendMessage, 
+    setActiveChat, 
+    acceptChatRequest, 
+    rejectChatRequest, 
+    // addReaction,
+    extendChat 
+  } = usePrivateChat(user?.id);
+  
   const [newPost, setNewPost] = useState('');
   const [isPosting, setIsPosting] = useState(false);
   
@@ -29,7 +49,7 @@ export default function FeedPage() {
   const [isPollMode, setIsPollMode] = useState(false);
   const [pollOptions, setPollOptions] = useState(['', '']);
 
-  // Auto-resize textarea logic
+  // Auto-resize textarea
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     if (textareaRef.current) {
@@ -75,6 +95,40 @@ export default function FeedPage() {
     }
   };
 
+  // ✅ Smart Chat Handler: Opens existing chat or pending request immediately
+  const handlePrivateChat = async (targetUserId: string) => {
+    if (!user) return;
+
+    // 1. Check existing active chat
+    const existingChat = chats.find(c => 
+      (c.created_by === user.id && c.participant_2 === targetUserId) ||
+      (c.participant_2 === user.id && c.created_by === targetUserId)
+    );
+
+    if (existingChat) {
+      setActiveChat(existingChat);
+      return;
+    }
+
+    // 2. Check pending requests (Fix for "Accept box not opening")
+    const pendingReq = pendingRequests.find(req => req.created_by === targetUserId);
+    if (pendingReq) {
+      setActiveChat(pendingReq);
+      return;
+    }
+
+    // 3. Initiate new
+    await initiateChat(targetUserId);
+  };
+
+  const getOtherUserName = () => {
+    if (!activeChat || !user) return 'Anonymous';
+    if (activeChat.created_by === user.id) {
+      return activeChat.participant_2_username || 'Anonymous';
+    }
+    return activeChat.created_by_username || 'Anonymous';
+  };
+
   return (
     <div className="max-w-2xl mx-auto pt-10 pb-52">
       {/* --- FEED LIST --- */}
@@ -93,9 +147,9 @@ export default function FeedPage() {
               onReply={(text: string, parentId?: string) => addReply(confession.id, text, parentId || null)}
               onReplyLike={(rid: string, isLiked: boolean) => likeReply(rid, confession.id, isLiked)}
               onDelete={() => deleteConfession(confession.id)}
-              /* FIX: Use confession.id from closure, as ConfessionCard only passes rid */
               onReplyDelete={(rid: string) => deleteReply(rid, confession.id)}
               onVote={(pollId, idx) => voteOnPoll(pollId, confession.id, idx)}
+              onPrivateChat={handlePrivateChat}
               replyTree={getRepliesTree(confession.replies || [])} 
             />
           ))}
@@ -110,6 +164,26 @@ export default function FeedPage() {
         </div>
       )}
 
+      {/* --- PRIVATE CHAT MODAL --- */}
+      <AnimatePresence>
+        {activeChat && (
+          <PrivateChatModal
+            chat={activeChat}
+            currentUserId={user?.id || ''}
+            onClose={() => setActiveChat(null)}
+            onSendMessage={(content: string, imageUrl?: string) => sendMessage(activeChat.id, content, imageUrl)}
+            // ✅ Passing Handlers Correctly
+            onRespond={(chatId: string, status: 'active' | 'rejected') => {
+              if (status === 'active') acceptChatRequest(chatId);
+              else rejectChatRequest(chatId);
+            }}
+            // onReact={(msgId: string, emoji: string) => addReaction(msgId, emoji)}
+            onExtend={() => extendChat(activeChat.id)}
+            otherUserName={getOtherUserName()}
+          />
+        )}
+      </AnimatePresence>
+
       {/* --- INPUT BOX --- */}
       <div className="fixed bottom-6 left-0 right-0 z-40 px-4 pointer-events-none">
         <div className="max-w-2xl mx-auto pointer-events-auto">
@@ -118,9 +192,8 @@ export default function FeedPage() {
             
             <div className="relative bg-white/90 dark:bg-black/90 backdrop-blur-2xl border border-white/20 dark:border-zinc-800 rounded-[2rem] p-4 shadow-2xl flex flex-col gap-3">
               
-              {/* Text Input */}
               <div className="flex items-end gap-3">
-                <div className="flex-1 pl-1">
+                <div className="flex-1 min-w-0 pl-1">
                   <textarea
                     ref={textareaRef}
                     value={newPost}
@@ -131,7 +204,6 @@ export default function FeedPage() {
                   />
                 </div>
                 
-                {/* Poll Toggle Button */}
                 <button 
                   onClick={() => setIsPollMode(!isPollMode)}
                   className={`p-2 rounded-xl transition-all ${isPollMode ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/30' : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-zinc-800'}`}
@@ -139,7 +211,6 @@ export default function FeedPage() {
                   <BarChart2 className="w-5 h-5" />
                 </button>
 
-                {/* Post Button */}
                 <button
                   onClick={handlePost}
                   disabled={isPosting || !newPost.trim()}
@@ -149,7 +220,6 @@ export default function FeedPage() {
                 </button>
               </div>
               
-              {/* Poll Options UI */}
               <AnimatePresence>
                 {isPollMode && (
                   <motion.div 
@@ -162,8 +232,7 @@ export default function FeedPage() {
                         <p className="text-xs font-semibold text-gray-500 dark:text-gray-400 ml-1">Poll Options</p>
                         {pollOptions.map((opt, i) => (
                           <div key={i} className="flex gap-2 items-center">
-                            <div className="flex-1 relative group">
-                              {/* Number Badge */}
+                            <div className="flex-1 min-w-0 relative group">
                               <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
                                 <span className="text-xs text-gray-400 font-medium font-mono bg-gray-100 dark:bg-zinc-800 px-1.5 py-0.5 rounded">
                                   {i + 1}
@@ -181,7 +250,7 @@ export default function FeedPage() {
                             {pollOptions.length > 2 && (
                               <button 
                                 onClick={() => removeOption(i)} 
-                                className="p-2.5 bg-gray-50 dark:bg-zinc-800/50 border border-gray-200 dark:border-zinc-700 rounded-xl text-gray-400 hover:text-red-500 hover:border-red-500/30 hover:bg-red-50 dark:hover:bg-red-900/10 transition-all"
+                                className="p-2.5 bg-gray-50 dark:bg-zinc-800/50 border border-gray-200 dark:border-zinc-700 rounded-xl text-gray-400 hover:text-red-500 hover:border-red-500/30 hover:bg-red-50 dark:hover:bg-red-900/10 transition-all shrink-0"
                               >
                                 <X className="w-4 h-4" />
                               </button>
