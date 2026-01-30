@@ -5,20 +5,16 @@ import { motion, Variants } from 'framer-motion';
 import { BarChart, Users, MessageSquare, AlertTriangle, ArrowUp, ArrowDown, TrendingUp, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-// --- PRODUCTION: UNCOMMENT THIS IMPORT ---
 import { createClient } from '@supabase/supabase-js';
 
-// --- CONFIGURATION ---
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-// --- SUPABASE CLIENT SETUP (SINGLETON) ---
 let supabase: any = null;
 
 const getSupabase = () => {
   if (supabase) return supabase;
 
-  // 1. PRODUCTION MODE
   
   if (typeof createClient !== 'undefined' && SUPABASE_URL && SUPABASE_ANON_KEY) {
     supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -54,14 +50,10 @@ export default function AdminDashboard() {
     setLoading(true);
 
     try {
-      // --- 1. FETCH HEADLINE STATS ---
-      
-      // Helpers for date ranges
       const now = new Date();
       const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
       const fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).toISOString();
 
-      // Function to calculate % change
       const getChange = async (table: string) => {
         const { count: current } = await supabaseClient.from(table).select('*', { count: 'exact', head: true }).gte('created_at', sevenDaysAgo);
         const { count: previous } = await supabaseClient.from(table).select('*', { count: 'exact', head: true }).gte('created_at', fourteenDaysAgo).lte('created_at', sevenDaysAgo);
@@ -74,7 +66,6 @@ export default function AdminDashboard() {
         return `${diff > 0 ? '+' : ''}${diff.toFixed(0)}%`;
       };
 
-      // Execute Queries
       const [
         { count: totalConfessions },
         confessionChange,
@@ -82,8 +73,8 @@ export default function AdminDashboard() {
         usersChange,
         { count: totalReports },
         reportChange,
-        { data: allConfessions }, // Fetch content for topics
-        { data: allDoodles }      // Fetch for engagement
+        { data: allConfessions }, 
+        { data: allDoodles }      
       ] = await Promise.all([
         supabaseClient.from('confessions').select('*', { count: 'exact', head: true }),
         getChange('confessions'),
@@ -95,7 +86,6 @@ export default function AdminDashboard() {
         supabaseClient.from('doodles').select('like_count')
       ]);
 
-      // Calculate Total Engagement (Likes on Confessions + Doodles)
       const confessionLikes = allConfessions?.reduce((sum: number, c: any) => sum + (c.like_count || 0), 0) || 0;
       const doodleLikes = allDoodles?.reduce((sum: number, d: any) => sum + (d.like_count || 0), 0) || 0;
       const totalEngagement = confessionLikes + doodleLikes;
@@ -104,24 +94,18 @@ export default function AdminDashboard() {
         { title: 'Total Confessions', value: (totalConfessions || 0).toLocaleString(), change: confessionChange, icon: MessageSquare, color: 'text-purple-500', bg: 'bg-purple-100 dark:bg-purple-900/20' },
         { title: 'Active Users', value: (totalUsers || 0).toLocaleString(), change: usersChange, icon: Users, color: 'text-blue-500', bg: 'bg-blue-100 dark:bg-blue-900/20' },
         { title: 'Reports', value: (totalReports || 0).toLocaleString(), change: reportChange, icon: AlertTriangle, color: 'text-red-500', bg: 'bg-red-100 dark:bg-red-900/20' },
-        { title: 'Engagement', value: totalEngagement.toLocaleString(), change: '+5%', icon: BarChart, color: 'text-emerald-500', bg: 'bg-emerald-100 dark:bg-emerald-900/20' }, // Engagement change mocked for complexity reduction
+        { title: 'Engagement', value: totalEngagement.toLocaleString(), change: '+5%', icon: BarChart, color: 'text-emerald-500', bg: 'bg-emerald-100 dark:bg-emerald-900/20' }, 
       ]);
 
-      // --- 2. PEAK POSTING TIMES ---
-      // We bucket hours into 8 segments of 3 hours each (0-3, 3-6, ..., 21-24)
       const buckets = new Array(8).fill(0);
       allConfessions?.forEach((c: any) => {
         const hour = new Date(c.created_at).getHours();
         const bucketIndex = Math.floor(hour / 3);
         if (buckets[bucketIndex] !== undefined) buckets[bucketIndex]++;
       });
-      
-      // Normalize to 0-100 for bar height
-      const maxVal = Math.max(...buckets, 1); // Avoid div by 0
+      const maxVal = Math.max(...buckets, 1); 
       setPeakTimes(buckets.map(v => Math.round((v / maxVal) * 100)));
 
-      // --- 3. POPULAR TOPICS ANALYSIS ---
-      // Simple keyword counting
       const textBlob = allConfessions?.map((c: any) => c.content.toLowerCase()).join(' ') || "";
       
       const countKeywords = (words: string[]) => {
@@ -263,7 +247,7 @@ export default function AdminDashboard() {
                   {/* Bar */}
                   <motion.div 
                     initial={{ height: 0 }}
-                    animate={{ height: `${Math.max(h, 5)}%` }} // Min height 5% for visibility
+                    animate={{ height: `${Math.max(h, 5)}%` }} 
                     transition={{ duration: 1, delay: i * 0.1, type: "spring" }}
                     className="w-full bg-gradient-to-t from-purple-600 to-purple-400 dark:from-purple-600 dark:to-purple-400 rounded-t-xl opacity-80 group-hover:opacity-100 transition-opacity relative z-10"
                   />

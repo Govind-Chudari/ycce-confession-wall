@@ -8,9 +8,6 @@ import { useAuth } from '@/lib/hooks/useAuth';
 export default function HomePage() {
   const { profile } = useAuth(); 
 
-  // --- ANIMATION VARIANTS ---
-
-  // Stagger container
   const containerVariants = {
     hidden: { opacity: 0 },
     visible: {
@@ -22,21 +19,19 @@ export default function HomePage() {
     },
   };
 
-  // Card entry animation
   const itemVariants = {
     hidden: { y: 40, opacity: 0 },
     visible: {
       y: 0,
       opacity: 1,
       transition: {
-        type: 'spring' as const, // FIX: Added 'as const' to narrow type from string to 'spring'
+        type: 'spring' as const, 
         stiffness: 100,
         damping: 15,
       },
     },
   };
 
-  // The "Pop Up" Cartoon Image Variant
   const popUpImageVariants = {
     initial: { 
       y: 120, 
@@ -50,7 +45,7 @@ export default function HomePage() {
       opacity: 1, 
       rotate: -12, 
       transition: { 
-        type: "spring" as const, // FIX: Added 'as const' here as well
+        type: "spring" as const, 
         stiffness: 180, 
         damping: 12,
         mass: 0.8
@@ -71,7 +66,6 @@ export default function HomePage() {
           <h1 className="text-4xl md:text-6xl font-extrabold text-gray-900 dark:text-white tracking-tight">
             Hello,{" "}
             <motion.span 
-              // Continuous gradient text animation
               animate={{ 
                 backgroundPosition: ["0% 50%", "100% 50%", "0% 50%"],
               }}

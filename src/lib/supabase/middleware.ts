@@ -58,8 +58,6 @@ export async function middleware(request: NextRequest) {
 
   const path = request.nextUrl.pathname;
 
-  // 1. PROTECTED ROUTES (Dashboard, Profile, etc.)
-  // Agar user login nahi hai aur in pages par jane ki koshish kare, to Sign In par bhejo.
   if (path.startsWith('/home') || 
       path.startsWith('/profile') ||
       path.startsWith('/feed') ||
@@ -69,12 +67,6 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/signin', request.url))
     }
   }
-
-  // 2. AUTH ROUTES (Sign In, Sign Up)
-  // Agar user PEHLE SE login hai, to use wapis Home par bhejo.
-  // Lekin agar wo stuck hai, to hum is logic ko temporarily comment out kar sakte hain.
-  // Filhal main isse enable kar raha hu, kyunki ye standard behavior hai.
-  // Agar aap loop me phass jao, to browser ki cookies clear kar lena.
   if (path.startsWith('/signin') || path.startsWith('/signup')) {
     if (user) {
       return NextResponse.redirect(new URL('/home', request.url))

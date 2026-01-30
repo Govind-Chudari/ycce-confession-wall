@@ -7,9 +7,9 @@ import { z } from 'zod';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { User, Building, GraduationCap, Phone, Hash, CheckCircle, Loader2, ChevronDown, Sparkles, School } from 'lucide-react';
-import { createBrowserClient } from '@supabase/ssr';
+// Using a relative path to resolve the module resolution issue found during build
+import { createClient } from '@/lib/supabase/client';
 
-// 1. Router Shim (Note: In a real Next.js App Router app, use import { useRouter } from 'next/navigation')
 const useRouter = () => ({
   push: (path: string) => {
     console.log('Navigating to:', path);
@@ -21,15 +21,6 @@ const useRouter = () => ({
   }
 });
 
-// 2. Real Supabase Client
-const createClient = () => {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-  );
-};
-
-// Helper: Username Generator
 function generateAnonymousUsername() {
   const adjectives = ['Silent', 'Hidden', 'Misty', 'Shadow', 'Secret', 'Quiet', 'Cosmic', 'Nebula', 'Echo', 'Ghost'];
   const nouns = ['Writer', 'Student', 'Observer', 'Voice', 'Echo', 'Traveler', 'Dreamer', 'Thinker', 'Specter', 'Soul'];
@@ -69,8 +60,6 @@ export default function ProfileSetupPage() {
     getValues,
     reset, 
   } = useForm<ProfileForm>({
-    // FIX: Cast resolver to 'any' to handle the type mismatch between 
-    // z.coerce (accepts unknown) and ProfileForm (expects number)
     resolver: zodResolver(profileSchema) as any,
     defaultValues: {
       anonymous_username: '', 
@@ -78,15 +67,11 @@ export default function ProfileSetupPage() {
       department: '',
       enrollment_number: '',
       phone_number: '',
-      // Initialize these to undefined or empty string to prevent controlled/uncontrolled warnings
-      // @ts-ignore
-      year: '', 
-      // @ts-ignore
-      semester: '',
+      year: '' as any, 
+      semester: '' as any,
     },
   });
 
-  // Responsive check
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
@@ -94,12 +79,11 @@ export default function ProfileSetupPage() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Calculate completion percentage
   const formValues = watch();
   useEffect(() => {
-    const watchedFields = ['branch', 'department', 'year', 'semester', 'enrollment_number', 'gender', 'phone_number'];
+    const watchedFields = ['branch', 'department', 'year', 'semester', 'enrollment_number', 'gender', 'phone_number'] as const;
     const filledFields = watchedFields.filter(key => {
-        const val = formValues[key as keyof ProfileForm];
+        const val = formValues[key];
         return val !== undefined && val !== '' && val !== null;
     }).length;
     
@@ -107,7 +91,6 @@ export default function ProfileSetupPage() {
     setCompletion(Math.min(100, Math.round((filledFields / totalFields) * 100)));
   }, [formValues]);
 
-  // Load Data
   useEffect(() => {
     let mounted = true;
     const checkUserAndFetchData = async () => {
@@ -115,11 +98,12 @@ export default function ProfileSetupPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!mounted) return;
         
-        // In real app, uncomment this:
-        // if (!user) { router.push('/signin'); return; }
-        
         if (user) {
-            const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+            const { data: profile } = await (supabase
+              .from('profiles')
+              .select('*')
+              .eq('id', user.id)
+              .single() as any);
 
             if (profile) {
               setIsEditing(true); 
@@ -129,7 +113,7 @@ export default function ProfileSetupPage() {
                   year: profile.year,
                   semester: profile.semester,
                   enrollment_number: profile.enrollment_number || '',
-                  gender: profile.gender as any || '',
+                  gender: profile.gender || '',
                   phone_number: profile.phone_number || '',
                   anonymous_username: profile.anonymous_username || '',
               });
@@ -146,17 +130,18 @@ export default function ProfileSetupPage() {
     };
     checkUserAndFetchData();
     return () => { mounted = false; };
-  }, [reset, setValue, getValues]);
+  }, [reset, setValue, getValues, supabase]);
 
-  // FIX: Use 'any' type for data argument to bypass strict SubmitHandler<T> check
-  // The resolver guarantees the data shape at runtime.
-  const onSubmit = async (data: any) => {
+  const onSubmit = async (data: ProfileForm) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      // In real app: if (!user) return;
       
-      const userId = user?.id || 'test-user-id';
-      const userEmail = user?.email || 'test@ycce.in';
+      const userId = user?.id;
+      const userEmail = user?.email;
+
+      if (!userId || !userEmail) {
+        throw new Error("User authentication required");
+      }
   
       const profileData = {
         id: userId,
@@ -173,13 +158,13 @@ export default function ProfileSetupPage() {
         updated_at: new Date().toISOString(),
       };
   
-      const { error } = await supabase.from("profiles").upsert(profileData);
+      // Cast the from clause to 'any' to bypass strict schema validation errors during build
+      const { error } = await (supabase.from("profiles") as any).upsert(profileData);
   
       if (error) throw error;
   
       toast.success(isEditing ? "Profile updated successfully!" : "Profile completed!");
       
-      // Hard redirect to clear cache
       setTimeout(() => { window.location.href = "/profile"; }, 800);
       
     } catch (error: any) {
@@ -207,8 +192,7 @@ export default function ProfileSetupPage() {
 
   const getIconClass = (fieldName: keyof ProfileForm) => {
     const value = formValues?.[fieldName];
-    const isFilled = value && value.toString().trim().length > 0;
-    // Default color gray/purple on focus, but Green if valid
+    const isFilled = value !== undefined && value !== null && value.toString().trim().length > 0;
     if (isFilled) return "h-4 w-4 md:h-5 md:w-5 text-green-500 transition-colors";
     return "h-4 w-4 md:h-5 md:w-5 text-gray-400 group-focus-within:text-purple-500 transition-colors";
   };
@@ -216,7 +200,6 @@ export default function ProfileSetupPage() {
   return (
     <div className="min-h-screen w-full relative overflow-hidden flex items-center justify-center p-4 bg-gray-50 dark:bg-zinc-950 transition-colors duration-500">
        
-       {/* --- ANIMATED BACKGROUND --- */}
        <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
           <motion.div 
             animate={{ x: [0, 100, 0], y: [0, -50, 0], scale: [1, 1.2, 1] }}
@@ -237,11 +220,9 @@ export default function ProfileSetupPage() {
           transition={{ duration: 0.5, ease: "easeOut" }}
           className="bg-white/70 dark:bg-zinc-900/60 backdrop-blur-2xl border border-white/20 dark:border-white/10 rounded-[2rem] shadow-2xl p-6 md:p-8 relative overflow-hidden"
         >
-          {/* Subtle shine effect */}
           <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent pointer-events-none" />
           
           <div className="relative">
-            {/* Header */}
             <div className="mb-6 md:mb-8 text-center md:text-left flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
                 <h1 className="text-2xl md:text-3xl font-extrabold text-gray-900 dark:text-white mb-2 flex items-center gap-2 justify-center md:justify-start">
@@ -253,14 +234,12 @@ export default function ProfileSetupPage() {
                 </p>
               </div>
               
-              {/* Completion Badge */}
               <div className="flex items-center gap-2 bg-purple-100 dark:bg-purple-900/30 px-3 py-1.5 rounded-full self-center md:self-auto border border-purple-200 dark:border-purple-800">
                 <div className="text-[10px] font-bold text-purple-600 dark:text-purple-300 uppercase tracking-wider">Completed</div>
                 <div className="text-xs font-black text-purple-700 dark:text-white">{completion}%</div>
               </div>
             </div>
 
-            {/* Progress Bar */}
             <div className="mb-8 w-full bg-gray-200 dark:bg-zinc-800 rounded-full h-1.5 overflow-hidden">
               <motion.div
                 initial={{ width: 0 }}
@@ -272,7 +251,6 @@ export default function ProfileSetupPage() {
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div className="grid md:grid-cols-2 gap-4">
                 
-                {/* Branch Select */}
                 <div className="space-y-1">
                   <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1">Branch</label>
                   <div className="relative group">
@@ -301,7 +279,6 @@ export default function ProfileSetupPage() {
                   {errors.branch && <p className="text-red-500 text-[10px] ml-1">{errors.branch.message}</p>}
                 </div>
 
-                {/* Department Input */}
                 <div className="space-y-1">
                   <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1">Department</label>
                   <div className="relative group">
@@ -317,7 +294,6 @@ export default function ProfileSetupPage() {
                   {errors.department && <p className="text-red-500 text-[10px] ml-1">{errors.department.message}</p>}
                 </div>
 
-                {/* Year Select */}
                 <div className="space-y-1">
                   <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1">Year</label>
                   <div className="relative group">
@@ -338,7 +314,6 @@ export default function ProfileSetupPage() {
                   {errors.year && <p className="text-red-500 text-[10px] ml-1">{errors.year.message}</p>}
                 </div>
 
-                {/* Semester Select */}
                 <div className="space-y-1">
                   <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1">Semester</label>
                   <div className="relative group">
@@ -358,7 +333,6 @@ export default function ProfileSetupPage() {
                   {errors.semester && <p className="text-red-500 text-[10px] ml-1">{errors.semester.message}</p>}
                 </div>
 
-                {/* Enrollment Number */}
                 <div className="space-y-1">
                   <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1">Enrollment No</label>
                   <div className="relative group">
@@ -374,7 +348,6 @@ export default function ProfileSetupPage() {
                   {errors.enrollment_number && <p className="text-red-500 text-[10px] ml-1">{errors.enrollment_number.message}</p>}
                 </div>
 
-                {/* Gender Select */}
                 <div className="space-y-1">
                   <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1">Gender</label>
                   <div className="relative group">
@@ -395,7 +368,6 @@ export default function ProfileSetupPage() {
                   {errors.gender && <p className="text-red-500 text-[10px] ml-1">{errors.gender.message}</p>}
                 </div>
 
-                {/* Phone Number */}
                 <div className="space-y-1">
                   <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1">Phone Number</label>
                   <div className="relative group">
@@ -405,14 +377,12 @@ export default function ProfileSetupPage() {
                     <input
                       {...register('phone_number')}
                       placeholder="10-digit number"
-                      maxLength={10}
                       className={inputClass}
                     />
                   </div>
                   {errors.phone_number && <p className="text-red-500 text-[10px] ml-1">{errors.phone_number.message}</p>}
                 </div>
 
-                {/* Anonymous Username */}
                 <div className="space-y-1">
                   <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1">Anonymous ID</label>
                   <div className="relative group">

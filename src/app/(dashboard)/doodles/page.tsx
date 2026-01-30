@@ -10,12 +10,9 @@ import {
 import { toast } from 'sonner';
 import { createClient } from '@supabase/supabase-js';
 
-// --- CONFIGURATION ---
-// Ensure these are set in your .env.local file
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
-// --- SINGLETON CLIENT SETUP ---
 let supabaseInstance: any = null;
 
 const getSupabase = () => {
@@ -35,7 +32,6 @@ const getSupabase = () => {
   return supabaseInstance;
 };
 
-// --- CONSTANTS ---
 const FONT_OPTIONS = [
   { id: 'sans', label: 'Sans', value: 'sans-serif', family: 'sans-serif' },
   { id: 'serif', label: 'Serif', value: 'serif', family: 'Noto Serif, serif' },
@@ -50,7 +46,6 @@ const COLORS = [
   '#FF2D55', '#FFFFFF'
 ];
 
-// --- TYPES ---
 type Tool = 'select' | 'draw' | 'pan' | 'eraser';
 
 interface BaseElement {
@@ -88,7 +83,6 @@ interface ImageElement extends BaseElement {
 
 type DoodleElement = Stroke | TextElement | ImageElement;
 
-// --- UTILS ---
 const distance = (a: {x:number, y:number}, b: {x:number, y:number}) => 
   Math.sqrt(Math.pow(a.x - b.x, 2) + Math.pow(a.y - b.y, 2));
 
@@ -107,7 +101,6 @@ const isPointInStroke = (point: {x:number, y:number}, stroke: Stroke) => {
 };
 
 export default function DoodlesPage() {
-  // --- STATE ---
   const [user, setUser] = useState<any>(null);
   const [isGuest, setIsGuest] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
@@ -150,7 +143,6 @@ export default function DoodlesPage() {
 
   const supabase = getSupabase();
 
-  // --- INITIAL LOAD ---
   useEffect(() => {
     if (!supabase) {
         setAuthLoading(false);
@@ -231,7 +223,6 @@ export default function DoodlesPage() {
     offsetRef.current = offset;
   }, [scale, offset]);
 
-  // --- ACTIONS ---
   const saveElementToDB = async (element: DoodleElement) => {
     setElements(prev => [...prev, element]);
 
@@ -308,12 +299,9 @@ export default function DoodlesPage() {
       }
   };
 
-  // --- HIT TESTING (FIXED LOOP) ---
   const hitTest = (worldX: number, worldY: number): DoodleElement | null => {
     const point = { x: worldX, y: worldY };
     
-    // FIX: Avoid spread syntax on array in loop head for esbuild compatibility
-    // Instead of [...elements].reverse(), we slice and reverse separately
     const reversedElements = elements.slice().reverse();
     
     for (const el of reversedElements) {
@@ -339,7 +327,6 @@ export default function DoodlesPage() {
       }
   };
 
-  // --- DRAWING LOGIC ---
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -351,7 +338,6 @@ export default function DoodlesPage() {
     ctx.translate(offset.x, offset.y);
     ctx.scale(scale, scale);
 
-    // Grid
     const gridSize = scale < 0.5 ? 100 : 50;
     const left = -offset.x / scale;
     const top = -offset.y / scale;
@@ -432,7 +418,6 @@ export default function DoodlesPage() {
 
   useEffect(() => { draw(); }, [draw]);
 
-  // --- WHEEL LOGIC ---
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -456,7 +441,6 @@ export default function DoodlesPage() {
     return () => container.removeEventListener('wheel', handleWheel);
   }, []);
 
-  // --- INPUT HANDLERS ---
   const handlePointerDown = (e: any) => {
     if (textInput?.isOpen) setTextInput(null);
     setContextMenu({ ...contextMenu, visible: false });

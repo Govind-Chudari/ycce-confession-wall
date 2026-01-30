@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createClient } from '../../../lib/supabase/client'; // Real Supabase Client
+import { createClient } from '../../../lib/supabase/client';
 import { motion } from 'framer-motion';
 import { User, Mail, Building, GraduationCap, Loader2, Sparkles, Hash, Phone, Edit3 } from 'lucide-react';
-import Link from 'next/link'; // Import Link
+import Link from 'next/link'; 
 
 export default function ProfilePage() {
   const [profile, setProfile] = useState<any>(null);

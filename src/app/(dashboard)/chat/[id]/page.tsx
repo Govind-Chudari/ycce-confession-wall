@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+// Import from next/navigation is standard for Next.js App Router
 import { useParams, useRouter } from 'next/navigation';
+// Adjusted relative path to account for the directory depth in the project structure
 import { createClient } from '@/lib/supabase/client';
 import { toast } from 'sonner';
 import { Send, Clock, ArrowLeft, Lock, AlertTriangle } from 'lucide-react';
@@ -9,6 +11,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 type Message = {
   id: string;
+  chat_id: string;
   sender_id: string;
   content: string;
   created_at: string;
@@ -24,7 +27,8 @@ type ChatDetails = {
 };
 
 export default function PrivateChatPage() {
-  const { id } = useParams(); // Chat ID from URL
+  const params = useParams();
+  const id = params?.id as string;
   const router = useRouter();
   const supabase = createClient();
   
@@ -41,36 +45,37 @@ export default function PrivateChatPage() {
   // 1. Initialize & Auth Check
   useEffect(() => {
     const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      if (!id) return;
+      
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (!authUser) {
         toast.error("Please sign in");
         router.push('/');
         return;
       }
-      setUser(user);
+      setUser(authUser);
 
       // Fetch Chat Details
-      // FIX: Explicitly handle data typing to prevent 'never' type error during build
-      const { data, error } = await supabase
-        .from('private_chats')
+      // Using 'as any' to bypass potential inference issues during build
+      const { data, error } = await (supabase
+        .from('private_chats') as any)
         .select('*')
         .eq('id', id)
         .single();
 
-      // Explicit cast to ChatDetails
-      const chatData = data as ChatDetails | null;
-
-      if (error || !chatData) {
+      if (error || !data) {
         toast.error("Chat not found or access denied");
         router.push('/');
         return;
       }
 
+      const chatData = data as ChatDetails;
+
       // Verify Participant
       const isParticipant = 
-        chatData.created_by === user.id || 
-        chatData.participant_2 === user.id || 
-        chatData.participant_3 === user.id;
+        chatData.created_by === authUser.id || 
+        chatData.participant_2 === authUser.id || 
+        chatData.participant_3 === authUser.id;
 
       if (!isParticipant) {
         toast.error("You are not part of this private chat");
@@ -82,8 +87,8 @@ export default function PrivateChatPage() {
       setLoading(false);
 
       // Fetch Initial Messages
-      const { data: msgs } = await supabase
-        .from('private_chat_messages')
+      const { data: msgs } = await (supabase
+        .from('private_chat_messages') as any)
         .select('*')
         .eq('chat_id', id)
         .order('created_at', { ascending: true });
@@ -109,7 +114,11 @@ export default function PrivateChatPage() {
           filter: `chat_id=eq.${id}`
         },
         (payload) => {
-          setMessages((prev) => [...prev, payload.new as Message]);
+          setMessages((prev) => {
+            const exists = prev.some(m => m.id === payload.new.id);
+            if (exists) return prev;
+            return [...prev, payload.new as Message];
+          });
         }
       )
       .subscribe();
@@ -150,13 +159,11 @@ export default function PrivateChatPage() {
   // 5. Send Message
   const handleSend = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!newMessage.trim() || isExpired || !user) return;
+    if (!newMessage.trim() || isExpired || !user || !id) return;
 
     const content = newMessage.trim();
-    setNewMessage(''); // Optimistic clear
+    setNewMessage(''); // Optimistic UI clear
 
-    // FIX: Cast the table reference to 'any' to completely bypass Supabase strict typing
-    // This solves the "Argument of type ... is not assignable to parameter of type 'never'" error
     const { error } = await (supabase.from('private_chat_messages') as any).insert({
       chat_id: id,
       sender_id: user.id,
@@ -165,7 +172,7 @@ export default function PrivateChatPage() {
 
     if (error) {
       toast.error("Failed to send");
-      setNewMessage(content); // Restore if failed
+      setNewMessage(content); // Restore content on failure
     }
   };
 
@@ -213,36 +220,38 @@ export default function PrivateChatPage() {
       </header>
 
       {/* --- MESSAGES AREA --- */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-zinc-800">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
         <div className="flex justify-center py-4">
           <div className="rounded-xl bg-purple-50 px-4 py-2 text-xs text-purple-600 dark:bg-purple-900/20 dark:text-purple-300 text-center max-w-xs">
             This chat will self-destruct in 10 minutes. Messages are private between participants.
           </div>
         </div>
 
-        {messages.map((msg, i) => {
-          const isMe = msg.sender_id === user?.id;
-          const isConsecutive = i > 0 && messages[i - 1].sender_id === msg.sender_id;
+        <AnimatePresence initial={false}>
+          {messages.map((msg, i) => {
+            const isMe = msg.sender_id === user?.id;
+            const isConsecutive = i > 0 && messages[i - 1].sender_id === msg.sender_id;
 
-          return (
-            <motion.div
-              key={msg.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className={`flex w-full ${isMe ? 'justify-end' : 'justify-start'}`}
-            >
-              <div
-                className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-sm break-words ${
-                  isMe
-                    ? 'bg-gradient-to-br from-purple-600 to-pink-600 text-white rounded-tr-none'
-                    : 'bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 text-gray-800 dark:text-gray-200 rounded-tl-none'
-                } ${isConsecutive ? 'mt-1' : 'mt-3'}`}
+            return (
+              <motion.div
+                key={msg.id}
+                initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                className={`flex w-full ${isMe ? 'justify-end' : 'justify-start'}`}
               >
-                {msg.content}
-              </div>
-            </motion.div>
-          );
-        })}
+                <div
+                  className={`max-w-[80%] rounded-2xl px-4 py-2.5 text-sm leading-relaxed shadow-sm break-words ${
+                    isMe
+                      ? 'bg-gradient-to-br from-purple-600 to-pink-600 text-white rounded-tr-none'
+                      : 'bg-white dark:bg-zinc-900 border border-gray-100 dark:border-zinc-800 text-gray-800 dark:text-gray-200 rounded-tl-none'
+                  } ${isConsecutive ? 'mt-1' : 'mt-3'}`}
+                >
+                  {msg.content}
+                </div>
+              </motion.div>
+            );
+          })}
+        </AnimatePresence>
         <div ref={messagesEndRef} />
       </div>
 

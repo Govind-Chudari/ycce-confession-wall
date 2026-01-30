@@ -11,13 +11,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Mail, Lock, ArrowRight, AlertCircle, Loader2, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
-// Schema for Sign In
 const signInSchema = z.object({
   email: z.string().email('Invalid email').endsWith('@ycce.in', 'Must be a YCCE email'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
-// Schema for Forgot Password
 const forgotPasswordSchema = z.object({
   email: z.string().email('Invalid email').endsWith('@ycce.in', 'Must be a YCCE email'),
 });
@@ -32,7 +30,6 @@ export default function SignInPage() {
   const [isMobile, setIsMobile] = useState(false);
   const [view, setView] = useState<'signin' | 'forgot'>('signin');
 
-  // Sign In Form Hooks
   const {
     register,
     handleSubmit,
@@ -43,7 +40,6 @@ export default function SignInPage() {
     resolver: zodResolver(signInSchema),
   });
 
-  // Forgot Password Form Hooks
   const {
     register: registerForgot,
     handleSubmit: handleSubmitForgot,
@@ -82,14 +78,12 @@ export default function SignInPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Authentication failed");
 
-      // Check profile
       const { data: profile } = await supabase
         .from('profiles')
         .select('profile_completed')
         .eq('id', user.id)
         .single();
 
-      // Fix: Cast profile to any to avoid TS error 'property does not exist on type never'
       if (!profile || !(profile as any).profile_completed) {
         toast.info('Please complete your profile');
         router.push('/profile-setup');

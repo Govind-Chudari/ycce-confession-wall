@@ -41,8 +41,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           console.error("Profile check error:", error);
         }
 
-        // If profile exists but incomplete, redirect
-        // Fix: Cast profileData to any to avoid TS error 'property does not exist on type never'
         if (profileData && !(profileData as any).profile_completed) {
           router.push('/profile-setup');
           return;
@@ -58,7 +56,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     checkUser();
     
-    // Theme Logic
     const savedTheme = localStorage.getItem('theme');
     const shouldBeDark = savedTheme ? savedTheme === 'dark' : true;
     setIsDark(shouldBeDark);

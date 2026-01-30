@@ -4,8 +4,6 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2, Send, BarChart2, X, Plus } from 'lucide-react';
 
-// ✅ FIX: Trying 2 levels up (Safe for src/app/confession/page.tsx structure)
-// Agar yeh bhi fail hua, toh folder structure confirm karna padega.
 import { useConfessions } from '@/lib/hooks/useConfessions';
 import { usePrivateChat } from '@/lib/hooks/usePrivateChat';
 import { ConfessionCard } from '@/components/confession/ConfessionCard'; 
@@ -28,7 +26,6 @@ export default function FeedPage() {
 
   const { user } = useAuth();
   
-  // ✅ Private Chat Integration with all handlers
   const { 
     activeChat, 
     chats,
@@ -45,11 +42,9 @@ export default function FeedPage() {
   const [newPost, setNewPost] = useState('');
   const [isPosting, setIsPosting] = useState(false);
   
-  // Poll State
   const [isPollMode, setIsPollMode] = useState(false);
   const [pollOptions, setPollOptions] = useState(['', '']);
 
-  // Auto-resize textarea
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     if (textareaRef.current) {
@@ -95,11 +90,9 @@ export default function FeedPage() {
     }
   };
 
-  // ✅ Smart Chat Handler: Opens existing chat or pending request immediately
   const handlePrivateChat = async (targetUserId: string) => {
     if (!user) return;
 
-    // 1. Check existing active chat
     const existingChat = chats.find(c => 
       (c.created_by === user.id && c.participant_2 === targetUserId) ||
       (c.participant_2 === user.id && c.created_by === targetUserId)
@@ -110,14 +103,12 @@ export default function FeedPage() {
       return;
     }
 
-    // 2. Check pending requests (Fix for "Accept box not opening")
     const pendingReq = pendingRequests.find(req => req.created_by === targetUserId);
     if (pendingReq) {
       setActiveChat(pendingReq);
       return;
     }
 
-    // 3. Initiate new
     await initiateChat(targetUserId);
   };
 
@@ -172,7 +163,6 @@ export default function FeedPage() {
             currentUserId={user?.id || ''}
             onClose={() => setActiveChat(null)}
             onSendMessage={(content: string, imageUrl?: string) => sendMessage(activeChat.id, content, imageUrl)}
-            // ✅ Passing Handlers Correctly
             onRespond={(chatId: string, status: 'active' | 'rejected') => {
               if (status === 'active') acceptChatRequest(chatId);
               else rejectChatRequest(chatId);

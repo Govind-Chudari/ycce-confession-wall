@@ -13,12 +13,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { confession_id, content, parent_reply_id } = body;
 
-    // Validate
     if (!confession_id || !content || content.length < 1 || content.length > 2000) {
       return NextResponse.json({ error: 'Invalid input' }, { status: 400 });
     }
 
-    // Get user profile
     const { data: profile } = await supabase
       .from('profiles')
       .select('anonymous_username, anonymous_avatar')
@@ -29,7 +27,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    // Create reply
     const { data: reply, error } = await supabase
       .from('confession_replies')
       .insert({

@@ -5,22 +5,17 @@ import { motion, AnimatePresence } from "framer-motion";
 import { AlertTriangle, Send, Paperclip, ShieldAlert, ChevronDown, Check, Loader2, CloudOff } from "lucide-react";
 import { toast } from "sonner";
 
-// --- PRODUCTION: UNCOMMENT THIS IMPORT ---
 import { createClient } from '@supabase/supabase-js';
 
-// --- CONFIGURATION ---
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-// A NIL UUID to satisfy the content_id NOT NULL constraint for general reports
 const GENERAL_REPORT_ID = '00000000-0000-0000-0000-000000000000'; 
 
-// --- SUPABASE CLIENT SETUP (SINGLETON) ---
 let supabase: any = null;
 
 const getSupabase = () => {
   if (supabase) return supabase;
 
-  // 1. PRODUCTION MODE
   if (typeof createClient !== 'undefined' && SUPABASE_URL && SUPABASE_ANON_KEY) {
     supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
       auth: { persistSession: true, autoRefreshToken: true }
@@ -48,7 +43,6 @@ export default function ReportPage() {
   
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -66,7 +60,6 @@ export default function ReportPage() {
     setIsSubmitting(true);
 
     try {
-        // 1. Authenticate (Guest or Real)
         let { data: { user } } = await supabaseClient.auth.getUser();
         
         if (!user) {
@@ -74,10 +67,8 @@ export default function ReportPage() {
             if (error) {
                 console.error("Auth failed:", error);
                 setIsOfflineMode(true);
-                // In a real app we might stop here, but for now we let it fall through to mock behavior
             } else {
                 user = data.user;
-                // Create Guest Profile (to satisfy Foreign Key reporter_id)
                 await supabaseClient.from('profiles').upsert(
                     { 
                         id: user.id, 
@@ -88,8 +79,6 @@ export default function ReportPage() {
             }
         }
 
-        // 2. Prepare Payload matching schema
-        // We use GENERAL_REPORT_ID for content_id because this is a generic form
         const payload = {
             reporter_id: user?.id,
             content_type: category.id,
@@ -100,19 +89,17 @@ export default function ReportPage() {
             created_at: new Date().toISOString()
         };
 
-        // 3. Send to DB
         const { error } = await supabaseClient.from('reports').insert(payload);
 
         if (error) throw error;
 
         toast.success("Report submitted successfully! We'll look into it.");
-        setDescription(""); // Reset form
+        setDescription(""); 
         setCategory(ISSUE_TYPES[0]);
 
     } catch (error: any) {
         console.error("Submission error:", error);
         if (error.code === '23503') {
-             // Foreign Key violation (Profile missing)
              toast.error("Account setup issue. Please reload and try again.");
         } else {
              toast.error("Failed to submit report. Please try again.");

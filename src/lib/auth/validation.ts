@@ -1,7 +1,5 @@
-// Input validation schemas using Zod
 import { z } from 'zod';
 
-// Sign up validation
 export const signUpSchema = z.object({
   email: z
     .string()
@@ -9,7 +7,6 @@ export const signUpSchema = z.object({
     .endsWith('@ycce.in', 'Must be a YCCE email (@ycce.in)'),
 });
 
-// Profile setup validation
 export const profileSetupSchema = z.object({
   branch: z.string().min(1, 'Branch is required'),
   department: z.string().min(1, 'Department is required'),
@@ -21,13 +18,11 @@ export const profileSetupSchema = z.object({
   anonymous_username: z.string().min(3).max(30).optional(),
 });
 
-// Confession validation
 export const confessionSchema = z.object({
   content: z.string().min(1).max(5000, 'Confession must be less than 5000 characters'),
   image_url: z.string().url().optional(),
 });
 
-// Reply validation
 export const replySchema = z.object({
   confession_id: z.string().uuid(),
   content: z.string().min(1).max(2000, 'Reply must be less than 2000 characters'),

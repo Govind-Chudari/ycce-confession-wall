@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { createClient } from '../supabase/client'; // Fixed relative path
+import { createClient } from '../supabase/client'; 
 import type { User } from '@supabase/supabase-js';
 
 export function useAuth() {
@@ -53,7 +53,7 @@ export function useAuth() {
     );
 
     return () => subscription.unsubscribe();
-  }, []); // Remove dependency on supabase to prevent loops, client is stable
+  }, []); 
 
   return { 
     user, 

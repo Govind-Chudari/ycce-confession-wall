@@ -6,7 +6,6 @@ import Link from 'next/link';
 
 export default function LandingPage() {
   
-  // Animation Variants for Staggered Entry
   const containerVariants: Variants = {
     hidden: { opacity: 0 },
     visible: {

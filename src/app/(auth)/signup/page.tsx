@@ -12,7 +12,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Mail, ArrowRight, CheckCircle, Lock, ShieldCheck, AlertCircle, Loader2 } from 'lucide-react';
 
 
-// Strong Password Regex: At least 8 chars, 1 uppercase, 1 lowercase, 1 number/special char
 const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9!@#$%^&*])(?=.{8,})/;
 
 const signUpSchema = z.object({
@@ -48,7 +47,6 @@ export default function SignUpPage() {
     resolver: zodResolver(signUpSchema),
   });
 
-  // Check for mobile screen size to adjust animations
   useEffect(() => {
     const checkMobile = () => setIsMobile(window.innerWidth < 768);
     checkMobile();
@@ -56,14 +54,12 @@ export default function SignUpPage() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Watch for errors to trigger sad face
   useEffect(() => {
     if (Object.keys(errors).length > 0) {
       setShowSad(true);
     }
   }, [errors]);
 
-  // Hide sad face when user starts typing again
   useEffect(() => {
     const subscription = watch(() => {
       if (showSad) setShowSad(false);
@@ -74,7 +70,6 @@ export default function SignUpPage() {
   const onSubmit = async (data: SignUpForm) => {
     setShowSad(false);
     try {
-      // 1. Sign Up with Email AND Password
       const { error } = await supabase.auth.signUp({
         email: data.email,
         password: data.password, 

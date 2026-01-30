@@ -24,7 +24,6 @@ export const ReplyThread = forwardRef<HTMLDivElement, ReplyProps>(
     const lastTapTime = useRef(0);
     const touchTimer = useRef<NodeJS.Timeout | null>(null);
 
-    // --- Data Mapping from your original logic ---
     const profileData = 
       (Array.isArray(reply.profiles) ? reply.profiles[0] : reply.profiles) || 
       reply.profile || 
@@ -102,7 +101,6 @@ export const ReplyThread = forwardRef<HTMLDivElement, ReplyProps>(
       }
     };
 
-    // --- Gesture Handlers ---
     const handleContextMenu = (e: React.MouseEvent) => {
         e.stopPropagation();
         if (isOwner && onDelete) {
@@ -138,7 +136,7 @@ export const ReplyThread = forwardRef<HTMLDivElement, ReplyProps>(
     return (
       <motion.div 
           ref={ref}
-          layout="position" // ✅ Fixed: 'position' is more stable for deep recursion than full layout
+          layout="position" 
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, height: 0, marginBottom: 0, overflow: 'hidden' }}

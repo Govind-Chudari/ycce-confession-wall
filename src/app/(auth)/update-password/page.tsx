@@ -36,7 +36,6 @@ function UpdatePasswordContent() {
   });
 
   useEffect(() => {
-    // Check for errors in the URL (e.g., link expired)
     const error = searchParams.get('error');
     const errorDescription = searchParams.get('error_description');
     const errorCode = searchParams.get('error_code');

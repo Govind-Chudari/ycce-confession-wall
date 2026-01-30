@@ -14,12 +14,10 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { content, image_url } = body;
 
-    // Validate content
     if (!content || content.length < 1 || content.length > 5000) {
       return NextResponse.json({ error: 'Invalid content length' }, { status: 400 });
     }
 
-    // Get user profile for anonymous username
     const { data: profile } = await supabase
       .from('profiles')
       .select('anonymous_username, anonymous_avatar')
@@ -30,7 +28,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    // Create confession
     const { data: confession, error } = await supabase
       .from('confessions')
       .insert({

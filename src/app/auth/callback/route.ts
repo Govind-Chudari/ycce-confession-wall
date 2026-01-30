@@ -35,7 +35,6 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL("/signin", request.url));
   }
 
-  // Fetch user after session created
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -44,7 +43,6 @@ export async function GET(request: Request) {
     return NextResponse.redirect(new URL("/signin", request.url));
   }
 
-  // Check profile completion
   const { data: profile } = await supabase
     .from("profiles")
     .select("profile_completed")

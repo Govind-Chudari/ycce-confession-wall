@@ -5,23 +5,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { HeartHandshake, Shield, AlertTriangle, X, Send, Heart, Loader2, Trash2, MoreHorizontal } from 'lucide-react';
 import { toast } from 'sonner';
 
-// --- PRODUCTION: UNCOMMENT THIS IMPORT ---
 import { createClient } from '@supabase/supabase-js';
 
-// --- CONFIGURATION ---
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-// --- SUPABASE CLIENT SETUP ---
 let supabase: any = null;
 
-// 1. PRODUCTION MODE
 if (typeof createClient !== 'undefined') {
   supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 }
 
 
-// --- TYPES ---
 interface Vent {
   id: number | string; 
   text: string;
@@ -29,7 +24,7 @@ interface Vent {
   created_at: string;
   is_local?: boolean;
   user_id?: string;
-  timestamp?: Date; // For 10 min calculation
+  timestamp?: Date; 
 }
 
 export default function VentPage() {
@@ -41,7 +36,6 @@ export default function VentPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
   
-  // Context Menu State
   const [contextMenu, setContextMenu] = useState<{ visible: boolean, x: number, y: number, ventId: string | number | null }>({
     visible: false,
     x: 0,
@@ -50,10 +44,8 @@ export default function VentPage() {
   });
   const longPressTimer = useRef<NodeJS.Timeout | null>(null);
 
-  // Track supported vents locally
   const [supportedVents, setSupportedVents] = useState<Set<string | number>>(new Set());
 
-  // --- INITIAL LOAD ---
   useEffect(() => {
     const init = async () => {
         const { data: { user } } = await supabase.auth.getUser();
@@ -140,7 +132,6 @@ export default function VentPage() {
     return "Just now";
   };
 
-  // --- INTERACTION LOGIC ---
 
   const handleTouchStart = (e: React.TouchEvent, ventId: string | number) => {
     const touch = e.touches[0];
@@ -151,7 +142,7 @@ export default function VentPage() {
             y: touch.clientY,
             ventId: ventId
         });
-    }, 500); // 500ms for long press
+    }, 500); 
   };
 
   const handleTouchEnd = () => {
@@ -177,13 +168,11 @@ export default function VentPage() {
 
     if (!ventToDelete) return;
 
-    // Check ownership
     if (currentUser?.id !== ventToDelete.user_id && ventToDelete.user_id !== 'guest-user') {
         toast.error("You can only delete your own vents.");
         return;
     }
 
-    // Check time limit (10 mins)
     const tenMinsAgo = new Date(Date.now() - 10 * 60 * 1000);
     if (ventToDelete.timestamp && ventToDelete.timestamp < tenMinsAgo) {
         toast.error("Time limit exceeded. You can only delete within 10 mins.");

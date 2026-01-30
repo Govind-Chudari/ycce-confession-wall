@@ -39,17 +39,13 @@ export function PrivateChatModal({
   const isPending = chat.status === 'pending';
   const isReceiver = chat.participant_2 === currentUserId;
 
-  // Prevent background scroll when modal is open
   useEffect(() => {
-    // Save original styles
     const originalStyle = window.getComputedStyle(document.body).overflow;
     const originalHtmlStyle = window.getComputedStyle(document.documentElement).overflow;
     
-    // Lock both html and body to catch all scroll containers (Crucial for Next.js/React layouts)
     document.body.style.overflow = 'hidden';
     document.documentElement.style.overflow = 'hidden';
     
-    // Prevent touch actions on body to stop background elastic scrolling on iOS
     document.body.style.touchAction = 'none';
 
     return () => { 
@@ -71,10 +67,8 @@ export function PrivateChatModal({
     return () => clearInterval(interval);
   }, [chat.expires_at, onClose, isPending]);
 
-  // Auto-scroll to bottom
   useEffect(() => { 
     if (messagesEndRef.current) {
-      // Using 'auto' instead of 'smooth' to prevent fighting with user scroll
       messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
     }
   }, [chat.messages]);
@@ -154,9 +148,7 @@ export function PrivateChatModal({
           initial={{ y: "100%" }} animate={{ y: 0 }} exit={{ y: "100%" }}
           transition={{ type: "spring", damping: 25, stiffness: 300 }}
           onClick={(e) => e.stopPropagation()} 
-          // FIX: Stop wheel propagation to prevent laptop trackpads from scrolling background
           onWheel={(e) => e.stopPropagation()}
-          // FIX: Strictly 80dvh ensures 20% gap at the top, preventing overlap on any device
           className="bg-white dark:bg-zinc-900 w-full sm:max-w-md h-[85dvh] sm:h-[650px] rounded-t-3xl sm:rounded-3xl flex flex-col overflow-hidden border-t sm:border border-gray-200 dark:border-zinc-800 shadow-2xl relative"
         >
           {/* Header */}
@@ -216,16 +208,13 @@ export function PrivateChatModal({
                <p className="text-sm text-gray-400 mt-1">Waiting for approval...</p>
             </div>
           ) : (
-            /* Messages Area - FIXED SCROLLING AND GESTURES */
             <div 
               ref={chatContainerRef} 
-              // Removed 'scroll-smooth' to fix trackpad inertia fighting
               className="flex-1 overflow-y-auto min-h-0 p-4 space-y-3 bg-gray-50 dark:bg-zinc-950/50 relative"
               style={{ 
-                // Ensure touch scrolling works properly on iOS
                 WebkitOverflowScrolling: 'touch',
                 overscrollBehavior: 'contain',
-                touchAction: 'pan-y' // Re-enabled explicitly to help browser identify scrollable area
+                touchAction: 'pan-y' 
               }} 
             >
               {/* Start Message */}

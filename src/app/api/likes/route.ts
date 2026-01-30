@@ -13,14 +13,13 @@ export async function POST(request: NextRequest) {
 
 
     const body = await request.json();
-    const { type, id } = body; // type: 'confession' | 'reply', id: uuid
+    const { type, id } = body; 
 
     if (!type || !id) {
       return NextResponse.json({ error: 'Invalid input' }, { status: 400 });
     }
 
     if (type === 'confession') {
-      // Check if already liked
       const { data: existing } = await supabase
         .from('confession_likes')
         .select('id')
@@ -29,7 +28,6 @@ export async function POST(request: NextRequest) {
         .single();
 
       if (existing) {
-        // Unlike
         const { error } = await supabase
           .from('confession_likes')
           .delete()
@@ -38,7 +36,6 @@ export async function POST(request: NextRequest) {
         if (error) throw error;
         return NextResponse.json({ action: 'unliked' });
       } else {
-        // Like
         const { error } = await supabase
           .from('confession_likes')
           .insert({ confession_id: id, user_id: user.id });
@@ -47,7 +44,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ action: 'liked' });
       }
     } else if (type === 'reply') {
-      // Similar logic for reply likes
       const { data: existing } = await supabase
         .from('reply_likes')
         .select('id')

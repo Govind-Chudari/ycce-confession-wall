@@ -37,7 +37,6 @@ export type Confession = {
   poll?: Poll;
 };
 
-// Interface for profile query results to prevent 'never' type errors
 interface ProfileData {
   anonymous_username: string;
 }
@@ -155,7 +154,6 @@ export function useConfessions() {
 
         const newData = data as any;
         
-        // FIX: Added explicit typing for the profile query
         const { data: profile } = await supabase
           .from('profiles')
           .select('anonymous_username')
@@ -192,7 +190,6 @@ export function useConfessions() {
     const handleReplyInsert = async (payload: any) => {
         const newReply = payload.new;
         
-        // FIX: Added explicit typing for the profile query in the reply handler as well
         const { data: profile } = await supabase
           .from('profiles')
           .select('anonymous_username')

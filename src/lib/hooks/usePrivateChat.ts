@@ -24,7 +24,6 @@ export type PrivateChat = {
   participant_2_username?: string;
 };
 
-// Interface for update operations to prevent 'never' type errors
 interface PrivateChatUpdate {
   status?: string;
   expires_at?: string;
@@ -112,7 +111,6 @@ export function usePrivateChat(userId?: string) {
       const currentExpiry = new Date(activeChat.expires_at).getTime();
       const newExpiry = new Date(currentExpiry + 10 * 60 * 1000).toISOString();
       
-      // FIX: Cast the table reference to 'any' to stop the query chain from inheriting 'never'
       const { error } = await (supabase
         .from('private_chats') as any)
         .update({ expires_at: newExpiry })
@@ -233,7 +231,6 @@ export function usePrivateChat(userId?: string) {
           const updatedChat = payload.new;
           if (activeChat?.id === updatedChat.id) {
               setActiveChat(prev => prev ? { ...prev, expires_at: updatedChat.expires_at, status: updatedChat.status } : null);
-              // FIX: Added optional chaining to activeChat.status to prevent build error
               if (updatedChat.status === 'active' && activeChat?.status === 'pending') {
                   toast.success('Request Accepted!');
               }
@@ -247,7 +244,6 @@ export function usePrivateChat(userId?: string) {
           const newReq = payload.new;
           if (newReq.status === 'pending') {
               const { data: profile } = await (supabase.from('profiles') as any).select('anonymous_username').eq('id', newReq.created_by).single();
-              // FIX: Cast newReq directly as PrivateChat in the spread to ensure all required fields are recognized
               const chatWithDetails: PrivateChat = { 
                   ...(newReq as PrivateChat), 
                   created_by_username: profile?.anonymous_username || 'Anonymous',

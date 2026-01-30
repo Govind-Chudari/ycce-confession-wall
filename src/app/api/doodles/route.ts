@@ -14,7 +14,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { doodle_data, position_x, position_y } = body;
 
-    // Get user profile
     const { data: profile } = await supabase
       .from('profiles')
       .select('anonymous_username')
@@ -25,7 +24,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
     }
 
-    // Save doodle
     const { data: doodle, error } = await supabase
       .from('doodles')
       .insert({

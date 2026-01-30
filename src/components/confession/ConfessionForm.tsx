@@ -6,7 +6,6 @@ import { Send, Loader2, X } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface ConfessionFormProps {
-  // We changed the type to match what FeedPage passes down
   onSubmit: (data: { content: string }) => Promise<void>; 
   onCancel?: () => void;
 }
@@ -31,14 +30,10 @@ export function ConfessionForm({ onSubmit, onCancel }: ConfessionFormProps) {
     setIsSubmitting(true);
 
     try {
-      // FIX: Call the prop function directly instead of fetch()
       await onSubmit({ content }); 
       
-      // Reset form on success
       setContent('');
       
-      // Note: We don't need toast.success here because the hook usually handles it,
-      // but keeping it doesn't hurt.
     } catch (error: any) {
       console.error('Post error:', error);
       toast.error('Failed to post confession');
