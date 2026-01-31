@@ -33,7 +33,7 @@ export function ShareStickerModal({ isOpen, onClose, confession, displayName }: 
         return;
       }
       const script = document.createElement('script');
-      script.src = 'https://unpkg.com/html-to-image@1.11.11/dist/html-to-image.js';
+      script.src = 'https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.min.js';
       script.onload = () => resolve();
       script.onerror = () => reject(new Error('Failed to load html-to-image'));
       document.body.appendChild(script);
@@ -46,11 +46,15 @@ export function ShareStickerModal({ isOpen, onClose, confession, displayName }: 
       await loadHtmlToImage();
       const htmlToImage = (window as any).htmlToImage;
 
+      await new Promise(resolve => setTimeout(resolve, 100));
+
       const blob = await htmlToImage.toBlob(stickerRef.current, {
-        pixelRatio: 3, 
+        pixelRatio: 2, 
+        quality: 0.95,
+        cacheBust: true, 
         backgroundColor: null,
         style: {
-          margin: '0', 
+          margin: '2', 
         },
       });
       
