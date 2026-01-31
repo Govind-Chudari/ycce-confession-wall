@@ -26,16 +26,16 @@ export function ShareStickerModal({ isOpen, onClose, confession, displayName }: 
   const [isGenerating, setIsGenerating] = useState(false);
   const stickerRef = useRef<HTMLDivElement>(null);
 
-  const loadHtml2Canvas = () => {
+  const loadHtmlToImage = () => {
     return new Promise<void>((resolve, reject) => {
-      if ((window as any).html2canvas) {
+      if ((window as any).htmlToImage) {
         resolve();
         return;
       }
       const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+      script.src = 'https://unpkg.com/html-to-image@1.11.11/dist/html-to-image.js';
       script.onload = () => resolve();
-      script.onerror = () => reject(new Error('Failed to load html2canvas'));
+      script.onerror = () => reject(new Error('Failed to load html-to-image'));
       document.body.appendChild(script);
     });
   };
@@ -43,20 +43,21 @@ export function ShareStickerModal({ isOpen, onClose, confession, displayName }: 
   const generateImage = async () => {
     if (!stickerRef.current) return null;
     try {
-      await loadHtml2Canvas();
-      const html2canvas = (window as any).html2canvas;
+      await loadHtmlToImage();
+      const htmlToImage = (window as any).htmlToImage;
 
-      const canvas = await html2canvas(stickerRef.current, {
-        scale: 3, 
-        useCORS: true,
+      const blob = await htmlToImage.toBlob(stickerRef.current, {
+        pixelRatio: 3, 
         backgroundColor: null,
-        logging: false,
+        style: {
+          margin: '0', 
+        },
       });
-      return new Promise<Blob | null>((resolve) => {
-        canvas.toBlob((blob: Blob | null) => resolve(blob), 'image/png', 1.0);
-      });
+      
+      return blob;
     } catch (error) {
       console.error('Generation failed', error);
+      toast.error('Failed to generate sticker. Try a different theme.');
       return null;
     }
   };
@@ -89,8 +90,6 @@ export function ShareStickerModal({ isOpen, onClose, confession, displayName }: 
         URL.revokeObjectURL(url);
         toast.success('Image downloaded! You can now post it.');
       }
-    } else {
-      toast.error('Failed to generate sticker.');
     }
     setIsGenerating(false);
   };
@@ -105,6 +104,7 @@ export function ShareStickerModal({ isOpen, onClose, confession, displayName }: 
             ]);
             toast.success('Sticker copied to clipboard!');
         } catch (err) {
+            console.error(err);
             toast.error('Failed to copy image');
         }
     }
@@ -129,7 +129,7 @@ export function ShareStickerModal({ isOpen, onClose, confession, displayName }: 
               animate={{ scale: 1, opacity: 1, y: 0 }}
               exit={{ scale: 0.95, opacity: 0, y: 20 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white dark:bg-zinc-900 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden mt-7 flex flex-col max-h-[80vh]"
+              className="bg-white dark:bg-zinc-900 w-full max-w-md rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[60vh]"
             >
               {/* Header */}
               <div className="p-4 border-b border-gray-100 dark:border-zinc-800 flex justify-between items-center">
@@ -140,12 +140,12 @@ export function ShareStickerModal({ isOpen, onClose, confession, displayName }: 
               </div>
 
               {/* Preview Area (Scrollable) */}
-              <div className="flex-1 overflow-y-auto p-6 bg-gray-50 dark:bg-zinc-950 flex flex-col items-center gap-6">
+              <div className="flex-1 overflow-y-auto p-2 bg-gray-50 dark:bg-zinc-950 flex flex-col items-center gap-6">
                 
                 {/* The STICKER (This is what gets captured) */}
                 <div 
                   ref={stickerRef}
-                  className={`relative w-[320px] aspect-[4/5] ${selectedTheme.bg} shadow-2xl rounded-3xl p-8 flex flex-col justify-between select-none transition-all duration-500`}
+                  className={`relative w-[300px] aspect-[4/5] ${selectedTheme.bg} shadow-2xl rounded-3xl p-8 flex flex-col justify-between select-none transition-all duration-500`}
                 >
                   {/* Decorative Elements */}
                   <div className="absolute top-4 right-4 opacity-50">
@@ -177,7 +177,7 @@ export function ShareStickerModal({ isOpen, onClose, confession, displayName }: 
                   {/* Footer/Branding */}
                   <div className="z-10 flex justify-center items-center gap-2 opacity-80">
                     <div className={`h-[1px] w-8 ${selectedTheme.id === 'cotton' ? 'bg-gray-400' : 'bg-white'}`}></div>
-                    <span className={`text-xs font-semibold tracking-widest uppercase ${selectedTheme.text}`}>Confessions App</span>
+                    <span className={`text-xs font-semibold tracking-widest uppercase ${selectedTheme.text}`}>Confessycce App</span>
                     <div className={`h-[1px] w-8 ${selectedTheme.id === 'cotton' ? 'bg-gray-400' : 'bg-white'}`}></div>
                   </div>
                 </div>
@@ -199,7 +199,7 @@ export function ShareStickerModal({ isOpen, onClose, confession, displayName }: 
               </div>
 
               {/* Actions */}
-              <div className="p-4 border-t border-gray-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 grid grid-cols-2 gap-3">
+              <div className="p-2 border-t border-gray-100 dark:border-zinc-800 bg-white dark:bg-zinc-900 grid grid-cols-2 gap-3">
                  <button 
                   onClick={handleCopyImage}
                   disabled={isGenerating}
