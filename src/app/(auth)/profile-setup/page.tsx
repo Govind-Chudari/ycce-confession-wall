@@ -7,7 +7,6 @@ import { z } from 'zod';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
 import { User, Building, GraduationCap, Phone, Hash, CheckCircle, Loader2, ChevronDown, Sparkles, School } from 'lucide-react';
-// Using a relative path to resolve the module resolution issue found during build
 import { createClient } from '@/lib/supabase/client';
 
 const useRouter = () => ({
@@ -158,7 +157,6 @@ export default function ProfileSetupPage() {
         updated_at: new Date().toISOString(),
       };
   
-      // Cast the from clause to 'any' to bypass strict schema validation errors during build
       const { error } = await (supabase.from("profiles") as any).upsert(profileData);
   
       if (error) throw error;
@@ -267,7 +265,8 @@ export default function ProfileSetupPage() {
                       <option value="AIDS" className={optionClass}>AIDS</option>
                       <option value="IOT" className={optionClass}>IOT</option>
                       <option value="Information Technology" className={optionClass}>Information Technology</option>
-                      <option value="Electronics" className={optionClass}>Electronics</option>
+                      <option value="Electronics And Telecommunication" className={optionClass}>Electronics</option>
+                      <option value="VLSI" className={optionClass}>VLSI</option>
                       <option value="Electrical" className={optionClass}>Electrical</option>
                       <option value="Mechanical" className={optionClass}>Mechanical</option>
                       <option value="Civil" className={optionClass}>Civil</option>
@@ -279,7 +278,7 @@ export default function ProfileSetupPage() {
                   {errors.branch && <p className="text-red-500 text-[10px] ml-1">{errors.branch.message}</p>}
                 </div>
 
-                <div className="space-y-1">
+                {/* <div className="space-y-1">
                   <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1">Department</label>
                   <div className="relative group">
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
@@ -287,12 +286,12 @@ export default function ProfileSetupPage() {
                     </div>
                     <input
                       {...register('department')}
-                      placeholder="e.g. Engineering"
+                      placeholder="e.g. CSE,ENTC"
                       className={inputClass}
                     />
                   </div>
                   {errors.department && <p className="text-red-500 text-[10px] ml-1">{errors.department.message}</p>}
-                </div>
+                </div> */}
 
                 <div className="space-y-1">
                   <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1">Year</label>
@@ -368,7 +367,7 @@ export default function ProfileSetupPage() {
                   {errors.gender && <p className="text-red-500 text-[10px] ml-1">{errors.gender.message}</p>}
                 </div>
 
-                <div className="space-y-1">
+                {/* <div className="space-y-1">
                   <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1">Phone Number</label>
                   <div className="relative group">
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
@@ -381,7 +380,7 @@ export default function ProfileSetupPage() {
                     />
                   </div>
                   {errors.phone_number && <p className="text-red-500 text-[10px] ml-1">{errors.phone_number.message}</p>}
-                </div>
+                </div> */}
 
                 <div className="space-y-1">
                   <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1">Anonymous ID</label>
