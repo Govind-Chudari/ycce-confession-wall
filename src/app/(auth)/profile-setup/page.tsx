@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
 import { motion } from 'framer-motion';
-import { User, Building, GraduationCap, Phone, Hash, CheckCircle, Loader2, ChevronDown, Sparkles, School } from 'lucide-react';
+import { User, GraduationCap, Hash, CheckCircle, Loader2, ChevronDown, Sparkles, School } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 
 const useRouter = () => ({
@@ -29,15 +29,14 @@ function generateAnonymousUsername() {
   return `${adj}${noun}${num}`;
 }
 
+// ❗ Only Anonymous ID is compulsory
 const profileSchema = z.object({
-  branch: z.string().min(1, 'Branch is required'),
-  department: z.string().min(1, 'Department is required'),
-  year: z.coerce.number().min(1).max(4),
-  semester: z.coerce.number().min(1).max(8),
-  enrollment_number: z.string().min(1, 'Enrollment number is required'),
-  gender: z.enum(['male', 'female', 'other', 'prefer_not_to_say']),
-  phone_number: z.string().regex(/^[0-9]{10}$/, 'Must be 10 digits'),
-  anonymous_username: z.string().min(3).max(30).optional(),
+  branch: z.string().optional(),
+  year: z.coerce.number().min(1).max(4).optional(),
+  semester: z.coerce.number().min(1).max(8).optional(),
+  enrollment_number: z.string().optional(),
+  gender: z.enum(['male', 'female', 'other', 'prefer_not_to_say']).optional(),
+  anonymous_username: z.string().min(3, 'Anonymous ID is required').max(30),
 });
 
 type ProfileForm = z.infer<typeof profileSchema>;
@@ -48,7 +47,6 @@ export default function ProfileSetupPage() {
   const [completion, setCompletion] = useState(0);
   const [loading, setLoading] = useState(true);
   const [isEditing, setIsEditing] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
 
   const {
     register,
@@ -57,76 +55,71 @@ export default function ProfileSetupPage() {
     formState: { errors, isSubmitting },
     setValue,
     getValues,
-    reset, 
+    reset,
   } = useForm<ProfileForm>({
     resolver: zodResolver(profileSchema) as any,
     defaultValues: {
-      anonymous_username: '', 
+      anonymous_username: '',
       branch: '',
-      department: '',
       enrollment_number: '',
-      phone_number: '',
-      year: '' as any, 
-      semester: '' as any,
+      year: undefined,
+      semester: undefined,
+      gender: undefined,
     },
   });
 
-  useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 768);
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
   const formValues = watch();
+
+    // ✔ completion based on all boxes (only Anonymous ID is compulsory)
   useEffect(() => {
-    const watchedFields = ['branch', 'department', 'year', 'semester', 'enrollment_number', 'gender', 'phone_number'] as const;
-    const filledFields = watchedFields.filter(key => {
-        const val = formValues[key];
-        return val !== undefined && val !== '' && val !== null;
+    const watchedFields = ['branch','year','semester','enrollment_number','gender','anonymous_username'] as const;
+    const filled = watchedFields.filter((k) => {
+      const v = formValues[k];
+      return v !== undefined && v !== null && v.toString().trim() !== '';
     }).length;
-    
-    const totalFields = 7; 
-    setCompletion(Math.min(100, Math.round((filledFields / totalFields) * 100)));
+
+    const total = watchedFields.length;
+    setCompletion(Math.round((filled / total) * 100));
   }, [formValues]);
+
 
   useEffect(() => {
     let mounted = true;
+
     const checkUserAndFetchData = async () => {
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!mounted) return;
-        
-        if (user) {
-            const { data: profile } = await (supabase
-              .from('profiles')
-              .select('*')
-              .eq('id', user.id)
-              .single() as any);
 
-            if (profile) {
-              setIsEditing(true); 
-              reset({
-                  branch: profile.branch || '',
-                  department: profile.department || '',
-                  year: profile.year,
-                  semester: profile.semester,
-                  enrollment_number: profile.enrollment_number || '',
-                  gender: profile.gender || '',
-                  phone_number: profile.phone_number || '',
-                  anonymous_username: profile.anonymous_username || '',
-              });
-            } else {
-              const currentName = getValues('anonymous_username');
-              if (!currentName) setValue('anonymous_username', generateAnonymousUsername());
-            }
+        if (user) {
+          const { data: profile } = await (supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', user.id)
+            .single() as any);
+
+          if (profile) {
+            setIsEditing(true);
+            reset({
+              branch: profile.branch || '',
+              year: profile.year ?? undefined,
+              semester: profile.semester ?? undefined,
+              enrollment_number: profile.enrollment_number || '',
+              gender: profile.gender ?? undefined,
+              anonymous_username: profile.anonymous_username || '',
+            });
+          } else {
+            const currentName = getValues('anonymous_username');
+            if (!currentName) setValue('anonymous_username', generateAnonymousUsername());
+          }
         }
       } catch (err) {
-        console.error("Error fetching profile:", err);
+        console.error('Error fetching profile:', err);
       } finally {
         if (mounted) setLoading(false);
       }
     };
+
     checkUserAndFetchData();
     return () => { mounted = false; };
   }, [reset, setValue, getValues, supabase]);
@@ -134,49 +127,49 @@ export default function ProfileSetupPage() {
   const onSubmit = async (data: ProfileForm) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       const userId = user?.id;
       const userEmail = user?.email;
 
       if (!userId || !userEmail) {
-        throw new Error("User authentication required");
+        throw new Error('User authentication required');
       }
-  
+
       const profileData = {
         id: userId,
-        email: userEmail, 
-        branch: data.branch,
-        department: data.department,
-        year: data.year,
-        semester: data.semester,
-        enrollment_number: data.enrollment_number,
-        gender: data.gender,
-        phone_number: data.phone_number,
-        anonymous_username: data.anonymous_username || generateAnonymousUsername(),
+        email: userEmail,
+        branch: data.branch || null,
+        year: data.year || null,
+        semester: data.semester || null,
+        enrollment_number: data.enrollment_number || null,
+        gender: data.gender || null,
+        anonymous_username: data.anonymous_username,
         profile_completed: true,
         updated_at: new Date().toISOString(),
       };
-  
-      const { error } = await (supabase.from("profiles") as any).upsert(profileData);
-  
+
+      const { error } = await (supabase.from('profiles') as any).upsert(profileData);
+
       if (error) throw error;
-  
-      toast.success(isEditing ? "Profile updated successfully!" : "Profile completed!");
-      
-      setTimeout(() => { window.location.href = "/profile"; }, 800);
-      
+
+      toast.success(isEditing ? 'Profile updated successfully!' : 'Profile completed!');
+
+      setTimeout(() => {
+        window.location.href = '/profile';
+      }, 800);
+
     } catch (error: any) {
-      console.error("Profile error:", error);
-      toast.error(error.message || "Failed to save profile");
+      console.error('Profile error:', error);
+      toast.error(error.message || 'Failed to save profile');
     }
   };
-        
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-zinc-950 flex items-center justify-center transition-colors duration-500">
-        <motion.div 
+        <motion.div
           animate={{ rotate: 360 }}
-          transition={{ repeat: Infinity, duration: 1, ease: "linear" }}
+          transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
           className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full"
         />
       </div>
@@ -185,41 +178,39 @@ export default function ProfileSetupPage() {
 
   const inputClass = `w-full pl-11 pr-4 py-3.5 bg-gray-50/50 dark:bg-black/20 border-2 rounded-xl outline-none transition-all duration-300 font-medium text-sm md:text-base border-transparent focus:border-purple-500 focus:ring-4 focus:ring-purple-500/10 hover:bg-gray-50 dark:hover:bg-black/30 placeholder:text-gray-400 dark:text-white`;
   const selectClass = `${inputClass} appearance-none cursor-pointer`;
-  
-  const optionClass = "bg-white dark:bg-zinc-900 text-gray-900 dark:text-gray-200 px-4 py-2";
+  const optionClass = 'bg-white dark:bg-zinc-900 text-gray-900 dark:text-gray-200 px-4 py-2';
 
   const getIconClass = (fieldName: keyof ProfileForm) => {
     const value = formValues?.[fieldName];
     const isFilled = value !== undefined && value !== null && value.toString().trim().length > 0;
-    if (isFilled) return "h-4 w-4 md:h-5 md:w-5 text-green-500 transition-colors";
-    return "h-4 w-4 md:h-5 md:w-5 text-gray-400 group-focus-within:text-purple-500 transition-colors";
+    if (isFilled) return 'h-4 w-4 md:h-5 md:w-5 text-green-500 transition-colors';
+    return 'h-4 w-4 md:h-5 md:w-5 text-gray-400 group-focus-within:text-purple-500 transition-colors';
   };
 
   return (
     <div className="min-h-screen w-full relative overflow-hidden flex items-center justify-center p-4 bg-gray-50 dark:bg-zinc-950 transition-colors duration-500">
-       
-       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-          <motion.div 
-            animate={{ x: [0, 100, 0], y: [0, -50, 0], scale: [1, 1.2, 1] }}
-            transition={{ duration: 20, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute top-[-10%] left-[-10%] w-[600px] h-[600px] bg-purple-500/30 dark:bg-purple-900/20 rounded-full blur-[100px] mix-blend-multiply dark:mix-blend-screen"
-          />
-          <motion.div 
-            animate={{ x: [0, -100, 0], y: [0, 100, 0], scale: [1, 1.1, 1] }}
-            transition={{ duration: 25, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-            className="absolute bottom-[-10%] right-[-10%] w-[700px] h-[700px] bg-pink-500/30 dark:bg-pink-900/20 rounded-full blur-[120px] mix-blend-multiply dark:mix-blend-screen"
-          />
-       </div>
+
+      <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+        <motion.div
+          animate={{ x: [0, 100, 0], y: [0, -50, 0], scale: [1, 1.2, 1] }}
+          transition={{ duration: 20, repeat: Infinity, ease: 'easeInOut' }}
+          className="absolute top-[-10%] left-[-10%] w-[600px] h-[600px] bg-purple-500/30 dark:bg-purple-900/20 rounded-full blur-[100px] mix-blend-multiply dark:mix-blend-screen"
+        />
+        <motion.div
+          animate={{ x: [0, -100, 0], y: [0, 100, 0], scale: [1, 1.1, 1] }}
+          transition={{ duration: 25, repeat: Infinity, ease: 'easeInOut', delay: 2 }}
+          className="absolute bottom-[-10%] right-[-10%] w-[700px] h-[700px] bg-pink-500/30 dark:bg-pink-900/20 rounded-full blur-[120px] mix-blend-multiply dark:mix-blend-screen"
+        />
+      </div>
 
       <div className="relative z-10 w-full max-w-2xl">
         <motion.div
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
+          transition={{ duration: 0.5, ease: 'easeOut' }}
           className="bg-white/70 dark:bg-zinc-900/60 backdrop-blur-2xl border border-white/20 dark:border-white/10 rounded-[2rem] shadow-2xl p-6 md:p-8 relative overflow-hidden"
         >
-          <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent pointer-events-none" />
-          
+
           <div className="relative">
             <div className="mb-6 md:mb-8 text-center md:text-left flex flex-col md:flex-row md:items-end justify-between gap-4">
               <div>
@@ -228,10 +219,10 @@ export default function ProfileSetupPage() {
                   <Sparkles className="w-5 h-5 md:w-6 md:h-6 text-yellow-500 hidden md:block" />
                 </h1>
                 <p className="text-xs md:text-base text-gray-500 dark:text-gray-400 font-medium">
-                  {isEditing ? 'Update your details below' : 'Let\'s get you ready for campus life'}
+                  {isEditing ? 'Update your details below' : 'Only Anonymous ID is compulsory'}
                 </p>
               </div>
-              
+
               <div className="flex items-center gap-2 bg-purple-100 dark:bg-purple-900/30 px-3 py-1.5 rounded-full self-center md:self-auto border border-purple-200 dark:border-purple-800">
                 <div className="text-[10px] font-bold text-purple-600 dark:text-purple-300 uppercase tracking-wider">Completed</div>
                 <div className="text-xs font-black text-purple-700 dark:text-white">{completion}%</div>
@@ -242,30 +233,29 @@ export default function ProfileSetupPage() {
               <motion.div
                 initial={{ width: 0 }}
                 animate={{ width: `${completion}%` }}
-                className="bg-gradient-to-r from-purple-600 via-pink-500 to-orange-400 h-full rounded-full transition-all duration-500 shadow-[0_0_10px_rgba(168,85,247,0.5)]"
+                className="bg-gradient-to-r from-purple-600 via-pink-500 to-orange-400 h-full rounded-full transition-all duration-500"
               />
             </div>
 
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
               <div className="grid md:grid-cols-2 gap-4">
-                
+
+                {/* Optional fields remain same UI */}
+
                 <div className="space-y-1">
                   <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1">Branch</label>
                   <div className="relative group">
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none z-10">
                       <School className={getIconClass('branch')} />
                     </div>
-                    <select
-                      {...register('branch')}
-                      className={selectClass}
-                    >
+                    <select {...register('branch')} className={selectClass}>
                       <option value="" className={optionClass}>Select Branch</option>
                       <option value="Computer Science" className={optionClass}>Computer Science</option>
                       <option value="AIML" className={optionClass}>AIML</option>
                       <option value="AIDS" className={optionClass}>AIDS</option>
                       <option value="IOT" className={optionClass}>IOT</option>
                       <option value="Information Technology" className={optionClass}>Information Technology</option>
-                      <option value="Electronics And Telecommunication" className={optionClass}>Electronics</option>
+                      <option value="Electronics And Telecommunication" className={optionClass}>Electronics And Telecommunication</option>
                       <option value="VLSI" className={optionClass}>VLSI</option>
                       <option value="Electrical" className={optionClass}>Electrical</option>
                       <option value="Mechanical" className={optionClass}>Mechanical</option>
@@ -275,23 +265,7 @@ export default function ProfileSetupPage() {
                       <ChevronDown className="h-4 w-4 text-gray-400" />
                     </div>
                   </div>
-                  {errors.branch && <p className="text-red-500 text-[10px] ml-1">{errors.branch.message}</p>}
                 </div>
-
-                {/* <div className="space-y-1">
-                  <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1">Department</label>
-                  <div className="relative group">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                      <Building className={getIconClass('department')} />
-                    </div>
-                    <input
-                      {...register('department')}
-                      placeholder="e.g. CSE,ENTC"
-                      className={inputClass}
-                    />
-                  </div>
-                  {errors.department && <p className="text-red-500 text-[10px] ml-1">{errors.department.message}</p>}
-                </div> */}
 
                 <div className="space-y-1">
                   <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1">Year</label>
@@ -310,7 +284,6 @@ export default function ProfileSetupPage() {
                       <ChevronDown className="h-4 w-4 text-gray-400" />
                     </div>
                   </div>
-                  {errors.year && <p className="text-red-500 text-[10px] ml-1">{errors.year.message}</p>}
                 </div>
 
                 <div className="space-y-1">
@@ -321,7 +294,7 @@ export default function ProfileSetupPage() {
                     </div>
                     <select {...register('semester')} className={selectClass}>
                       <option value="" className={optionClass}>Select Semester</option>
-                      {[1, 2, 3, 4, 5, 6, 7, 8].map(sem => (
+                      {[1,2,3,4,5,6,7,8].map(sem => (
                         <option key={sem} value={sem} className={optionClass}>Semester {sem}</option>
                       ))}
                     </select>
@@ -329,7 +302,6 @@ export default function ProfileSetupPage() {
                       <ChevronDown className="h-4 w-4 text-gray-400" />
                     </div>
                   </div>
-                  {errors.semester && <p className="text-red-500 text-[10px] ml-1">{errors.semester.message}</p>}
                 </div>
 
                 <div className="space-y-1">
@@ -338,13 +310,8 @@ export default function ProfileSetupPage() {
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                       <Hash className={getIconClass('enrollment_number')} />
                     </div>
-                    <input
-                      {...register('enrollment_number')}
-                      placeholder="e.g. 20CS001"
-                      className={inputClass}
-                    />
+                    <input {...register('enrollment_number')} className={inputClass} />
                   </div>
-                  {errors.enrollment_number && <p className="text-red-500 text-[10px] ml-1">{errors.enrollment_number.message}</p>}
                 </div>
 
                 <div className="space-y-1">
@@ -364,56 +331,44 @@ export default function ProfileSetupPage() {
                       <ChevronDown className="h-4 w-4 text-gray-400" />
                     </div>
                   </div>
-                  {errors.gender && <p className="text-red-500 text-[10px] ml-1">{errors.gender.message}</p>}
                 </div>
 
-                {/* <div className="space-y-1">
-                  <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1">Phone Number</label>
-                  <div className="relative group">
-                    <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                      <Phone className={getIconClass('phone_number')} />
-                    </div>
-                    <input
-                      {...register('phone_number')}
-                      placeholder="10-digit number"
-                      className={inputClass}
-                    />
-                  </div>
-                  {errors.phone_number && <p className="text-red-500 text-[10px] ml-1">{errors.phone_number.message}</p>}
-                </div> */}
-
+                {/* Only compulsory field */}
                 <div className="space-y-1">
-                  <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1">Anonymous ID</label>
+                  <label className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 ml-1">Anonymous ID *</label>
                   <div className="relative group">
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                       <User className={getIconClass('anonymous_username')} />
                     </div>
                     <input
                       {...register('anonymous_username')}
-                      placeholder="Auto-generated if empty"
+                      placeholder="Required"
                       className={inputClass}
                     />
                   </div>
-                  <p className="text-[9px] text-gray-500 dark:text-gray-500 mt-1 ml-1">Visible on confessions.</p>
+                  {errors.anonymous_username && (
+                    <p className="text-red-500 text-[10px] ml-1">{errors.anonymous_username.message}</p>
+                  )}
                 </div>
+
               </div>
 
               <motion.button
                 type="submit"
-                disabled={isSubmitting || completion < 100}
+                disabled={isSubmitting || !formValues.anonymous_username?.trim()}
                 whileHover={{ scale: 1.01 }}
                 whileTap={{ scale: 0.98 }}
-                className={`w-full py-3.5 md:py-4 rounded-xl font-bold text-white shadow-lg shadow-purple-500/25 flex items-center justify-center gap-2 transition-all duration-300 relative overflow-hidden text-sm md:text-base mt-6 ${
+                className={`w-full py-3.5 md:py-4 rounded-xl font-bold text-white shadow-lg flex items-center justify-center gap-2 transition-all duration-300 mt-6 ${
                   (isSubmitting || completion < 100)
-                    ? 'bg-zinc-300 dark:bg-zinc-800 text-zinc-500 cursor-not-allowed opacity-70' 
-                    : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500'
+                    ? 'bg-zinc-300 dark:bg-zinc-800 text-zinc-500 cursor-not-allowed opacity-70'
+                    : 'bg-gradient-to-r from-purple-600 to-pink-600'
                 }`}
               >
                 {isSubmitting ? (
-                  <Loader2 className="w-5 h-5 animate-spin" /> 
+                  <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
                   <>
-                    {isEditing ? 'Save Changes' : (completion < 100 ? `Complete all fields (${completion}%)` : 'Complete & Enter')} 
+                    {isEditing ? 'Save Changes' : 'Complete & Enter'}
                     <CheckCircle className="w-5 h-5" />
                   </>
                 )}
